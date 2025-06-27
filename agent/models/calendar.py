@@ -104,8 +104,14 @@ def _ensure_credentials_file() -> None:
     """Write credentials.json from secrets/env if it is missing."""
     if os.path.exists(CREDENTIALS_FILE):
         return
-    creds_blob = st.secrets.get("GOOGLE_CREDENTIALS_JSON", os.getenv("GOOGLE_CREDENTIALS_JSON"))
-
+    # creds_blob = st.secrets.get("GOOGLE_CREDENTIALS_JSON", os.getenv("GOOGLE_CREDENTIALS_JSON"))
+    
+    if "GOOGLE_CREDENTIALS_JSON" in st.secrets:
+        creds_blob = st.secrets["GOOGLE_CREDENTIALS_JSON"]
+    else:
+        creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    
+    creds_blob = json.loads(creds_blob)
     # If full blob not provided, attempt to assemble from discrete pieces
     if not creds_blob:
          pieces = {
