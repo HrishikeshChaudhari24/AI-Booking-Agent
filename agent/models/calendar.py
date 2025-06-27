@@ -118,11 +118,12 @@ def _ensure_credentials_file() -> None:
             "redirect_uris": st.secrets.GOOGLE_OAUTH_REDIRECT_URIS,
             "javascript_origins": st.secrets.GOOGLE_OAUTH_JS_ORIGINS,
         }
-
+          
         # Ensure mandatory pieces present
         if pieces["client_id"] and pieces["client_secret"]:
             creds_blob = json.dumps({"web": pieces}, indent=2)
         else:
+            logger.info("credentials.json created by _ensure_credentials_file at %s", pieces["client_id"])
             logger.error("Insufficient discrete OAuth pieces to build credentials.json")
             return
 
