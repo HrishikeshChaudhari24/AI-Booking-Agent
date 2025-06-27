@@ -534,5 +534,21 @@ def main():
                 "message_count": len(st.session_state.messages)
             })
 
+# ---------------------------------------------------------------------------
+# Ensure FastAPI backend is running when deployed on Streamlit Cloud
+# ---------------------------------------------------------------------------
+
+if "_backend_started" not in st.session_state:
+    try:
+        from threading import Thread
+        from agent.controllers.booking_controller import run_fastapi
+
+        Thread(target=run_fastapi, daemon=True).start()
+        st.session_state._backend_started = True
+        # Give the server a moment to bind
+        time.sleep(1)
+    except Exception as e:
+        st.warning(f"Could not start backend automatically: {e}")
+
 if __name__ == "__main__":
     main()
