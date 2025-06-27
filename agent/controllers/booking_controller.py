@@ -14,7 +14,6 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 import sqlite3
 from dotenv import load_dotenv
-from pathlib import Path
 
 from agent.models.database import (
     cleanup_expired_credentials,
@@ -65,55 +64,18 @@ logger = logging.getLogger(__name__)
 load_dotenv()  # Loads variables from a .env file into process env, if present
 
 # ---------------------------------------------------------------------------
-# IMPROVED CREDENTIALS HANDLING
+# Ensure credentials.json exists BEFORE OAuth calls (redundant fallback)
 # ---------------------------------------------------------------------------
 
-def ensure_credentials_file() -> bool:
-    """Ensure credentials.json exists and is valid before any OAuth operation."""
+_creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
+if _creds_blob and not os.path.exists(_CRED_PATH):
     try:
-        from agent.models.calendar import CREDENTIALS_FILE as _CRED_PATH  # local import to avoid heavy load
-
-        # Validate existing file
-        if os.path.exists(_CRED_PATH):
-            try:
-                with open(_CRED_PATH, "r", encoding="utf-8") as _f:
-                    json.load(_f)
-                logger.info("credentials.json exists at %s", _CRED_PATH)
-                return True
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning("Invalid credentials.json (%s). Recreating...", e)
-                try:
-                    os.remove(_CRED_PATH)
-                except Exception:
-                    pass
-
-        # Create from environment variable
-        creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
-        if not creds_blob:
-            logger.error("GOOGLE_CREDENTIALS_JSON environment variable is missing!")
-            return False
-
-        try:
-            creds_data = json.loads(creds_blob)
-        except json.JSONDecodeError as e:
-            logger.error("Invalid JSON in GOOGLE_CREDENTIALS_JSON: %s", e)
-            return False
-
-        # Ensure directory exists
-        Path(os.path.dirname(_CRED_PATH)).mkdir(parents=True, exist_ok=True)
-
+        os.makedirs(os.path.dirname(_CRED_PATH), exist_ok=True)
         with open(_CRED_PATH, "w", encoding="utf-8") as _f:
-            json.dump(creds_data, _f, indent=2)
-        logger.info("credentials.json created successfully at %s", _CRED_PATH)
-        return True
-    except Exception as e:
-        logger.exception("Failed in ensure_credentials_file: %s", e)
-        return False
-
-
-# Ensure credentials are available at import time
-if not ensure_credentials_file():
-    logger.critical("Cannot create credentials.json – OAuth will fail!")
+            _f.write(_creds_blob)
+        logger.info("credentials.json written early at %s via controller fallback", _CRED_PATH)
+    except Exception as _e:
+        logger.exception("Controller failed to write credentials.json: %s", _e)
 
 # Gemini and Groq configuration pulled from environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -937,54 +899,38 @@ async def get_session_user_endpoint(request: Request, browser_session_id: Option
 
 @app.post("/initiate_auth")
 async def initiate_auth(payload: dict, request: Request):
-    """Initiate authentication flow with robust credential checks"""
+    """Initiate authentication flow - SECURE VERSION"""
     try:
         user_email = payload.get("user_email")
         provided_session_id = payload.get("browser_session_id")
         browser_session_id = resolve_browser_session_id(request, provided_session_id)
-
+        
         if not user_email:
             return {"status": "error", "message": "user_email is required"}
-
-        # Ensure credentials are available before OAuth
-        if not ensure_credentials_file():
-            return {
-                "status": "error",
-                "message": "OAuth credentials not configured. Please contact administrator."
-            }
-
-        # Generate auth URL (retry once if credentials file was missing)
-        try:
-            auth_url = generate_auth_url(user_email)
-        except FileNotFoundError:
-            if ensure_credentials_file():
-                auth_url = generate_auth_url(user_email)
-            else:
-                logger.error("credentials.json missing after attempted creation")
-                return {
-                    "status": "error",
-                    "message": "OAuth configuration error. Please contact administrator."
-                }
-
-        # Track pending session
+        
+        # SECURITY: Always generate fresh auth URL for new browser sessions
+        # Don't allow reusing credentials across browser sessions
+        auth_url = generate_auth_url(user_email)
+        
+        # Store pending session
         if browser_session_id:
             browser_sessions[browser_session_id] = {
                 "user_email": user_email,
                 "status": "pending_auth",
                 "auth_url": auth_url
             }
-
+        
         return {
             "status": "pending_auth",
             "auth_url": auth_url,
-            "message": f"Authentication required for {user_email}"
+            "message": f"Fresh auth required for {user_email}"
         }
     except Exception as e:
         logger.exception("Error initiating auth")
         return {
             "status": "error",
             "auth_url": "",
-            "message": f"Authentication setup failed: {str(e)}"
+            "message": f"Failed to initiate auth: {str(e)}"
         }
 
 @app.get("/authenticated_users")
@@ -1153,26 +1099,17 @@ async def oauth_callback(code: str):
 
 @app.get("/check_auth")
 async def check_auth(request: Request, user_email: str, browser_session_id: Optional[str] = ""):
-    """Check authentication status with improved credential handling"""
+    """Check authentication status for a user in a specific browser session - SECURE"""
     try:
-        if not ensure_credentials_file():
-            return {
-                "authorized": False,
-                "status": "error",
-                "auth_url": "",
-                "error": "OAuth credentials not configured"
-            }
-
+        # Resolve browser session ID from cookie or param
         session_id = resolve_browser_session_id(request, browser_session_id)
+
+        # What is the current mapping (if any) stored in persistent DB?
         session_user = get_session_user(session_id) if session_id else None
 
-        # Session mapped to another user
+        # If this session is already linked to another user, force fresh auth
         if session_id and session_user and session_user != user_email:
-            try:
-                auth_url = generate_auth_url(user_email)
-            except Exception as e:
-                return {"authorized": False, "status": "error", "auth_url": "", "error": str(e)}
-
+            auth_url = generate_auth_url(user_email)
             browser_sessions[session_id] = {
                 "user_email": user_email,
                 "status": "pending_auth",
@@ -1180,41 +1117,69 @@ async def check_auth(request: Request, user_email: str, browser_session_id: Opti
             }
             return {"authorized": False, "status": "pending_auth", "auth_url": auth_url}
 
-        # Existing creds?
+        # --------------------------------------------------------------
+        # Validate existing credentials. Handle pending / completed flow.
+        # --------------------------------------------------------------
         creds = load_user_credentials(user_email)
         if creds:
             try:
-                _ = get_calendar_service(user_email)
-                # Completed if pending
+                service = get_calendar_service(user_email)
+
+                session_meta = browser_sessions.get(session_id) if session_id else None
+                if session_meta and session_meta.get("status") == "pending_auth":
+                    # Still waiting for explicit OAuth completion in this browser.
+                    return {
+                        "authorized": False,
+                        "status": "pending_auth",
+                        "auth_url": session_meta.get("auth_url", ""),
+                    }
+
+                # Mark this session completed and persist mapping
                 if session_id:
+                    store_browser_session(session_id, user_email)
                     browser_sessions[session_id] = {
                         "user_email": user_email,
                         "status": "completed",
                         "auth_url": "",
                     }
-                    store_browser_session(session_id, user_email)
                 return {"authorized": True, "status": "completed", "auth_url": ""}
             except Exception:
+                # Credentials invalid – force fresh OAuth
                 delete_user_credentials(user_email)
                 if session_id:
                     delete_browser_session(session_id, user_email)
+                    browser_sessions[session_id] = {
+                        "user_email": user_email,
+                        "status": "pending_auth",
+                        "auth_url": "",
+                    }
 
-        # Need fresh OAuth
-        try:
-            auth_url = generate_auth_url(user_email)
-        except Exception as e:
-            return {"authorized": False, "status": "error", "auth_url": "", "error": str(e)}
+        # ------------------------------------------------------------------
+        # 2. Generate a fresh auth URL (credentials missing/invalid or forced refresh)
+        # ------------------------------------------------------------------
 
+        # Generate new auth URL
+        auth_url = generate_auth_url(user_email)
         if session_id:
             browser_sessions[session_id] = {
                 "user_email": user_email,
                 "status": "pending_auth",
-                "auth_url": auth_url,
+                "auth_url": auth_url
             }
-        return {"authorized": False, "status": "pending_auth", "auth_url": auth_url}
+        return {
+            "authorized": False,
+            "status": "pending_auth",
+            "auth_url": auth_url
+        }
+        
     except Exception as e:
         logger.exception(f"Error in check_auth for {user_email}")
-        return {"authorized": False, "status": "error", "auth_url": "", "error": str(e)}
+        return {
+            "authorized": False,
+            "status": "error", 
+            "auth_url": "",
+            "error": str(e)
+        }
 
 
 @app.post("/logout")
