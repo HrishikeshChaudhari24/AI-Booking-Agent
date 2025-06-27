@@ -35,6 +35,21 @@ CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credent
 REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:8080/callback")
 
 # ---------------------------------------------------------------------------
+# Ensure credentials file exists from environment secret
+# ---------------------------------------------------------------------------
+
+_creds_from_env = os.getenv("GOOGLE_CREDENTIALS_JSON")
+if _creds_from_env and not os.path.exists(CREDENTIALS_FILE):
+    try:
+        # Create parent dir if needed
+        os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
+        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as _f:
+            _f.write(_creds_from_env)
+        logger.info("credentials.json written to %s from env", CREDENTIALS_FILE)
+    except Exception as _e:
+        logger.exception("Failed to write credentials file: %s", _e)
+
+# ---------------------------------------------------------------------------
 # Token helpers
 # ---------------------------------------------------------------------------
 
