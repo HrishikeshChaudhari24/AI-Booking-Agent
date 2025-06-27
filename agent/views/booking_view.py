@@ -8,6 +8,15 @@ import json
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components
 
+# ---------------------------------------------------------------------------
+# Ensure parent project root is on PYTHONPATH so `import agent...` works when
+# Streamlit launches this file from inside agent/views.
+# ---------------------------------------------------------------------------
+
+import os, sys
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
 
 BACKEND = "http://127.0.0.1:8080"
 
