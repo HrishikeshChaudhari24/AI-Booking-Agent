@@ -108,15 +108,15 @@ def _ensure_credentials_file() -> None:
 
     # If full blob not provided, attempt to assemble from discrete pieces
     if not creds_blob:
-        pieces = {
-            "client_id": st.secrets.get("GOOGLE_OAUTH_CLIENT_ID", os.getenv("GOOGLE_OAUTH_CLIENT_ID")),
-            "project_id": st.secrets.get("GOOGLE_OAUTH_PROJECT_ID", os.getenv("GOOGLE_OAUTH_PROJECT_ID")),
-            "auth_uri": st.secrets.get("GOOGLE_OAUTH_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
-            "token_uri": st.secrets.get("GOOGLE_OAUTH_TOKEN_URI", "https://oauth2.googleapis.com/token"),
-            "auth_provider_x509_cert_url": st.secrets.get("GOOGLE_OAUTH_CERTS_URI", "https://www.googleapis.com/oauth2/v1/certs"),
-            "client_secret": st.secrets.get("GOOGLE_OAUTH_CLIENT_SECRET", os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")),
-            "redirect_uris": st.secrets.get("GOOGLE_OAUTH_REDIRECT_URIS", os.getenv("GOOGLE_OAUTH_REDIRECT_URIS", "")).split(","),
-            "javascript_origins": st.secrets.get("GOOGLE_OAUTH_JS_ORIGINS", os.getenv("GOOGLE_OAUTH_JS_ORIGINS", "")).split(","),
+         pieces = {
+            "client_id": st.secrets.GOOGLE_OAUTH_CLIENT_ID,
+            "project_id": st.secrets.GOOGLE_OAUTH_PROJECT_ID,
+            "auth_uri": st.secrets.GOOGLE_OAUTH_AUTH_URI,
+            "token_uri": st.secrets.GOOGLE_OAUTH_TOKEN_URI,
+            "auth_provider_x509_cert_url": st.secrets.GOOGLE_OAUTH_CERTS_URI,
+            "client_secret": st.secrets.GOOGLE_OAUTH_CLIENT_SECRET,
+            "redirect_uris": st.secrets.GOOGLE_OAUTH_REDIRECT_URIS,
+            "javascript_origins": st.secrets.GOOGLE_OAUTH_JS_ORIGINS,
         }
 
         # Ensure mandatory pieces present
