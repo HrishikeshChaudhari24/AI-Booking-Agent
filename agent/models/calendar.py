@@ -102,9 +102,17 @@ def get_calendar_service(user_email: str):
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
     if not os.path.exists(CREDENTIALS_FILE):
-        raise FileNotFoundError("credentials.json not found – cannot initiate OAuth flow")
+        # Fallback: credentials.json may live in agent/credentials.json (Streamlit misplacement)
+        alt_path = _ROOT_DIR / "agent" / "credentials.json"
+        if os.path.exists(alt_path):
+            logger.warning("Using fallback credentials file at %s", alt_path)
+            cred_path = alt_path
+        else:
+            raise FileNotFoundError("credentials.json not found – cannot initiate OAuth flow")
+    else:
+        cred_path = CREDENTIALS_FILE
 
-    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+    flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), SCOPES)
     flow.redirect_uri = REDIRECT_URI
     auth_url, _ = flow.authorization_url(
         prompt="consent", access_type="offline", include_granted_scopes="true"
