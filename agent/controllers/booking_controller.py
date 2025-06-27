@@ -68,6 +68,8 @@ load_dotenv()  # Loads variables from a .env file into process env, if present
 # ---------------------------------------------------------------------------
 
 _creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
+logger.info("GOOGLE_CREDENTIALS_JSON length: %s", len(_creds_blob or ""))
+logger.info("CREDENTIALS_FILE path: %s", _CRED_PATH)
 if _creds_blob and not os.path.exists(_CRED_PATH):
     try:
         os.makedirs(os.path.dirname(_CRED_PATH), exist_ok=True)
