@@ -105,8 +105,27 @@ def _ensure_credentials_file() -> None:
     if os.path.exists(CREDENTIALS_FILE):
         return
     creds_blob = st.secrets.get("GOOGLE_CREDENTIALS_JSON", os.getenv("GOOGLE_CREDENTIALS_JSON"))
+
+    # If full blob not provided, attempt to assemble from discrete pieces
     if not creds_blob:
-        return
+        pieces = {
+            "client_id": st.secrets.get("GOOGLE_OAUTH_CLIENT_ID", os.getenv("GOOGLE_OAUTH_CLIENT_ID")),
+            "project_id": st.secrets.get("GOOGLE_OAUTH_PROJECT_ID", os.getenv("GOOGLE_OAUTH_PROJECT_ID")),
+            "auth_uri": st.secrets.get("GOOGLE_OAUTH_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
+            "token_uri": st.secrets.get("GOOGLE_OAUTH_TOKEN_URI", "https://oauth2.googleapis.com/token"),
+            "auth_provider_x509_cert_url": st.secrets.get("GOOGLE_OAUTH_CERTS_URI", "https://www.googleapis.com/oauth2/v1/certs"),
+            "client_secret": st.secrets.get("GOOGLE_OAUTH_CLIENT_SECRET", os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")),
+            "redirect_uris": st.secrets.get("GOOGLE_OAUTH_REDIRECT_URIS", os.getenv("GOOGLE_OAUTH_REDIRECT_URIS", "")).split(","),
+            "javascript_origins": st.secrets.get("GOOGLE_OAUTH_JS_ORIGINS", os.getenv("GOOGLE_OAUTH_JS_ORIGINS", "")).split(","),
+        }
+
+        # Ensure mandatory pieces present
+        if pieces["client_id"] and pieces["client_secret"]:
+            creds_blob = json.dumps({"web": pieces}, indent=2)
+        else:
+            logger.error("Insufficient discrete OAuth pieces to build credentials.json")
+            return
+
     try:
         os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
         with open(CREDENTIALS_FILE, "w", encoding="utf-8") as _f:
