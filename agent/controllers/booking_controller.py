@@ -62,11 +62,18 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()  # Loads variables from a .env file into process env, if present
 
-# Write credentials.json from env when it doesn't exist (Streamlit Cloud)
+# Write credentials.json to the path defined by GOOGLE_CREDENTIALS_FILE (or default)
 CREDS_JSON_ENV = os.getenv("GOOGLE_CREDENTIALS_JSON")
-if CREDS_JSON_ENV and not os.path.exists("credentials.json"):
-    with open("credentials.json", "w", encoding="utf-8") as f:
-        f.write(CREDS_JSON_ENV)
+CRED_FILE_PATH = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
+
+if CREDS_JSON_ENV:
+    # Always ensure directory exists
+    dir_path = os.path.dirname(CRED_FILE_PATH)
+    if dir_path and not os.path.exists(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
+    if not os.path.exists(CRED_FILE_PATH):
+        with open(CRED_FILE_PATH, "w", encoding="utf-8") as f:
+            f.write(CREDS_JSON_ENV)
 
 # Gemini and Groq configuration pulled from environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
