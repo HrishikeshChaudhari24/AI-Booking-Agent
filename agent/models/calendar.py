@@ -31,7 +31,9 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 # Resolve project root (two levels up from this file)
 _ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
 # Allow override via environment variable; otherwise look in root dir
-CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credentials.json"))
+CREDENTIALS_FILE = os.path.abspath(
+    os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credentials.json"))
+)
 REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:8080/callback")
 
 # ---------------------------------------------------------------------------
