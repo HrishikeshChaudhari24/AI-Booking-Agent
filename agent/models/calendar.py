@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import pathlib
 import pytz
+import streamlit as st
 
 import google.auth
 from googleapiclient.discovery import build
@@ -34,13 +35,13 @@ _ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
 CREDENTIALS_FILE = os.path.abspath(
     os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credentials.json"))
 )
-REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:8080/callback")
+REDIRECT_URI = st.secrets.get("OAUTH_REDIRECT_URI", os.getenv("OAUTH_REDIRECT_URI", "http://localhost:8080/callback"))
 
 # ---------------------------------------------------------------------------
 # Ensure credentials file exists from environment secret
 # ---------------------------------------------------------------------------
 
-_creds_from_env = os.getenv("GOOGLE_CREDENTIALS_JSON")
+_creds_from_env = st.secrets.get("GOOGLE_CREDENTIALS_JSON", os.getenv("GOOGLE_CREDENTIALS_JSON"))
 if _creds_from_env and not os.path.exists(CREDENTIALS_FILE):
     try:
         # Create parent dir if needed

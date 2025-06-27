@@ -14,6 +14,7 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 import sqlite3
 from dotenv import load_dotenv
+import streamlit as st
 
 from agent.models.database import (
     cleanup_expired_credentials,
@@ -64,10 +65,18 @@ logger = logging.getLogger(__name__)
 load_dotenv()  # Loads variables from a .env file into process env, if present
 
 # ---------------------------------------------------------------------------
+# Unified secret getter (Streamlit native or env fallback)
+# ---------------------------------------------------------------------------
+
+def get_secret(key: str, default: str = "") -> str:
+    """Return secret from st.secrets if present else from OS env."""
+    return st.secrets.get(key, os.getenv(key, default))
+
+# ---------------------------------------------------------------------------
 # Ensure credentials.json exists BEFORE OAuth calls (redundant fallback)
 # ---------------------------------------------------------------------------
 
-_creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
+_creds_blob = get_secret("GOOGLE_CREDENTIALS_JSON")
 logger.info("GOOGLE_CREDENTIALS_JSON length: %s", len(_creds_blob or ""))
 logger.info("CREDENTIALS_FILE path: %s", _CRED_PATH)
 if _creds_blob and not os.path.exists(_CRED_PATH):
@@ -80,13 +89,13 @@ if _creds_blob and not os.path.exists(_CRED_PATH):
         logger.exception("Controller failed to write credentials.json: %s", _e)
 
 # Gemini and Groq configuration pulled from environment variables
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEY = get_secret("GROQ_API_KEY", "")
 
 GEMINI_MODELS = [
     "gemini-2.0-flash",
     "gemini-1.5-flash",
 ]
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY", "")
 
 if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY is not set. Gemini calls will fail.")
