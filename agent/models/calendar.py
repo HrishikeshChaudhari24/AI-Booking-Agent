@@ -106,13 +106,13 @@ def _ensure_credentials_file() -> None:
         return
 
     # Try to load from secrets or environment
-    raw_creds_blob = None
+    raw_creds_blob = ""
     if "GOOGLE_CREDENTIALS_JSON" in st.secrets:
         raw_creds_blob = st.secrets["GOOGLE_CREDENTIALS_JSON"]
     else:
         raw_creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
-    creds_blob = None
+    creds_blob = ""
     if raw_creds_blob is not None:
         try:
             creds_blob = json.loads(raw_creds_blob)
