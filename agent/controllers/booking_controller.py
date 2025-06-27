@@ -51,6 +51,12 @@ from dateutil import parser
 from groq import Groq
 
 # ---------------------------------------------------------------------------
+# Logger first so it is available for any early warnings
+# ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
 # Environment / secret loading
 # ---------------------------------------------------------------------------
 
@@ -70,7 +76,6 @@ if not GEMINI_API_KEY:
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-logger = logging.getLogger(__name__)
 app = FastAPI()
 
 # ---------------------------------------------------------------------------
