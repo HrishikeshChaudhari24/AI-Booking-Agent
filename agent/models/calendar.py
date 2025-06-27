@@ -123,8 +123,8 @@ def _ensure_credentials_file() -> None:
         if pieces["client_id"] and pieces["client_secret"]:
             creds_blob = json.dumps({"web": pieces}, indent=2)
         else:
-            logger.info("credentials.json created by _ensure_credentials_file at %s", pieces["client_id"])
-            logger.error("Insufficient discrete OAuth pieces to build credentials.json")
+            # logger.info("credentials.json created by _ensure_credentials_file at %s", pieces["client_id"])
+            logger.error("Insufficient discrete OAuth pieces to build credentials.json", pieces["client_id"])
             return
 
     try:
