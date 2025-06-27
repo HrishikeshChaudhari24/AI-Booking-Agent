@@ -14,12 +14,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 user_credentials: Dict[str, Any] = {}
 
-# Ensure DB schema exists as soon as this module is imported
-try:
-    init_db()
-except Exception:
-    # If init fails, log but don't crash import; will attempt reset later
-    logger.exception("Database init failed during import")
+# Will call init_db() after all functions are defined (bottom of file)
 
 # ---------------------------------------------------------------------------
 # SQLite helpers
@@ -296,4 +291,13 @@ def check_database_health() -> bool:
         return True
     except Exception:
         logger.exception("Database health check failed")
-        return False 
+        return False
+
+# ---------------------------------------------------------------------------
+# Run DB initialisation when module is imported
+# ---------------------------------------------------------------------------
+
+try:
+    init_db()
+except Exception:
+    logger.exception("Database init failed during import") 
