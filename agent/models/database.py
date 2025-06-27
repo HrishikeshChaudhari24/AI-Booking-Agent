@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 user_credentials: Dict[str, Any] = {}
 
+# Ensure DB schema exists as soon as this module is imported
+try:
+    init_db()
+except Exception:
+    # If init fails, log but don't crash import; will attempt reset later
+    logger.exception("Database init failed during import")
+
 # ---------------------------------------------------------------------------
 # SQLite helpers
 # ---------------------------------------------------------------------------
@@ -195,6 +202,15 @@ def cleanup_expired_credentials() -> None:
     """Remove credentials older than 30 minutes from both disk and memory."""
     conn = sqlite3.connect("user_data.db")
     c = conn.cursor()
+    try:
+        c.execute("SELECT created_at FROM credentials LIMIT 1")  # quick existence check
+    except sqlite3.OperationalError as e:
+        if "no such table" in str(e):
+            logger.warning("Credentials table missing during cleanup – reinitialising DB")
+            init_db()
+            conn.close()
+            return
+
     expiry_time = (datetime.now() - timedelta(minutes=30)).isoformat()
     c.execute("SELECT email FROM credentials WHERE created_at < ?", (expiry_time,))
     expired = [row[0] for row in c.fetchall()]
