@@ -105,37 +105,48 @@ def _ensure_credentials_file() -> None:
     if os.path.exists(CREDENTIALS_FILE):
         return
 
+    # Load creds_blob from Streamlit secrets or environment variable
+    raw_creds_blob = None
     if "GOOGLE_CREDENTIALS_JSON" in st.secrets:
-        creds_blob = st.secrets["GOOGLE_CREDENTIALS_JSON"]
+        raw_creds_blob = st.secrets["GOOGLE_CREDENTIALS_JSON"]
     else:
-        creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        raw_creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
-    creds_blob = json.loads(creds_blob)
+    creds_blob = None
+    if raw_creds_blob:
+        try:
+            creds_blob = json.loads(raw_creds_blob)
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON format in GOOGLE_CREDENTIALS_JSON")
+            return
 
     # If full blob not provided, attempt to assemble from discrete pieces
     if not creds_blob:
-        pieces = {
-            "client_id": st.secrets.GOOGLE_OAUTH_CLIENT_ID,
-            "project_id": st.secrets.GOOGLE_OAUTH_PROJECT_ID,
-            "auth_uri": st.secrets.GOOGLE_OAUTH_AUTH_URI,
-            "token_uri": st.secrets.GOOGLE_OAUTH_TOKEN_URI,
-            "auth_provider_x509_cert_url": st.secrets.GOOGLE_OAUTH_CERTS_URI,
-            "client_secret": st.secrets.GOOGLE_OAUTH_CLIENT_SECRET,
-            "redirect_uris": st.secrets.GOOGLE_OAUTH_REDIRECT_URIS,
-            "javascript_origins": st.secrets.GOOGLE_OAUTH_JS_ORIGINS,
-        }
+        try:
+            pieces = {
+                "client_id": st.secrets.GOOGLE_OAUTH_CLIENT_ID,
+                "project_id": st.secrets.GOOGLE_OAUTH_PROJECT_ID,
+                "auth_uri": st.secrets.GOOGLE_OAUTH_AUTH_URI,
+                "token_uri": st.secrets.GOOGLE_OAUTH_TOKEN_URI,
+                "auth_provider_x509_cert_url": st.secrets.GOOGLE_OAUTH_CERTS_URI,
+                "client_secret": st.secrets.GOOGLE_OAUTH_CLIENT_SECRET,
+                "redirect_uris": st.secrets.GOOGLE_OAUTH_REDIRECT_URIS,
+                "javascript_origins": st.secrets.GOOGLE_OAUTH_JS_ORIGINS,
+            }
 
-        # Ensure mandatory pieces present
-        if pieces["client_id"] and pieces["client_secret"]:
-            creds_blob = json.dumps({"web": pieces}, indent=2)
-        else:
-            logger.error("Insufficient discrete OAuth pieces to build credentials.json: %s", pieces["client_id"])
+            if pieces["client_id"] and pieces["client_secret"]:
+                creds_blob = {"web": pieces}
+            else:
+                logger.error("Insufficient discrete OAuth pieces to build credentials.json")
+                return
+        except Exception as e:
+            logger.exception("Error assembling credentials from individual pieces")
             return
 
     try:
         os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
         with open(CREDENTIALS_FILE, "w", encoding="utf-8") as _f:
-            _f.write(creds_blob)
+            _f.write(json.dumps(creds_blob, indent=2))
         logger.info("credentials.json created by _ensure_credentials_file at %s", CREDENTIALS_FILE)
     except Exception:
         logger.exception("Failed to create credentials file in _ensure_credentials_file")
