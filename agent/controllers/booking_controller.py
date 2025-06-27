@@ -64,15 +64,18 @@ logger = logging.getLogger(__name__)
 load_dotenv()  # Loads variables from a .env file into process env, if present
 
 # ---------------------------------------------------------------------------
-# Ensure credentials.json exists BEFORE any OAuth call (early write)
+# Ensure credentials.json exists BEFORE OAuth calls (redundant fallback)
 # ---------------------------------------------------------------------------
 
 _creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
 if _creds_blob and not os.path.exists(_CRED_PATH):
-    os.makedirs(os.path.dirname(_CRED_PATH), exist_ok=True)
-    with open(_CRED_PATH, "w", encoding="utf-8") as _f:
-        _f.write(_creds_blob)
-    logger.info("credentials.json written early at %s", _CRED_PATH)
+    try:
+        os.makedirs(os.path.dirname(_CRED_PATH), exist_ok=True)
+        with open(_CRED_PATH, "w", encoding="utf-8") as _f:
+            _f.write(_creds_blob)
+        logger.info("credentials.json written early at %s via controller fallback", _CRED_PATH)
+    except Exception as _e:
+        logger.exception("Controller failed to write credentials.json: %s", _e)
 
 # Gemini and Groq configuration pulled from environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
