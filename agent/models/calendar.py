@@ -100,8 +100,25 @@ def get_calendar_service(user_email: str):
 # OAuth helpers
 # ---------------------------------------------------------------------------
 
+def _ensure_credentials_file() -> None:
+    """Write credentials.json from secrets/env if it is missing."""
+    if os.path.exists(CREDENTIALS_FILE):
+        return
+    creds_blob = st.secrets.get("GOOGLE_CREDENTIALS_JSON", os.getenv("GOOGLE_CREDENTIALS_JSON"))
+    if not creds_blob:
+        return
+    try:
+        os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
+        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as _f:
+            _f.write(creds_blob)
+        logger.info("credentials.json created by _ensure_credentials_file at %s", CREDENTIALS_FILE)
+    except Exception:
+        logger.exception("Failed to create credentials file in _ensure_credentials_file")
+
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
+    if not os.path.exists(CREDENTIALS_FILE):
+        _ensure_credentials_file()
     if not os.path.exists(CREDENTIALS_FILE):
         # Fallback: credentials.json may live in agent/credentials.json (Streamlit misplacement)
         alt_path = _ROOT_DIR / "agent" / "credentials.json"
