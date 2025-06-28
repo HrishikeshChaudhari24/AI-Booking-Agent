@@ -61,6 +61,12 @@ class SimpleCookieManager:
 # The key should be a secret for encryption
 cookies = SimpleCookieManager(key="dummy_key_for_now")
 
+def generate_browser_session_id():
+    """Generate a unique session ID for this browser"""
+    import random
+    import string
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+
 # ---------------------------------------------------------------------------
 # Enhanced Authentication Functions
 # ---------------------------------------------------------------------------
