@@ -788,19 +788,46 @@ def init_browser_sessions_db():
     conn.commit()
     conn.close()
 
+# ---------------------------------------------------------------------------
+# Optional Redis-backed session store (provides horizontal scalability). If
+# REDIS_URL and SESSION_ENCRYPTION_KEY are configured, the helper below will
+# return a fully-functional store; otherwise it is a no-op dummy so legacy
+# SQLite behaviour continues to work unchanged.  
+# ---------------------------------------------------------------------------
+
+from agent.utils.session_store import get_store as _get_session_store
+
+# Global instance shared by all request handlers
+SESSION_STORE = _get_session_store()
+
 def store_browser_session(session_id: str, user_email: str):
-    """Store browser session in database"""
+    """Persist or update the mapping between a browser session ID and the user email.
+
+    1. Primary store → Redis (if configured)
+    2. Fallback → embedded SQLite table so local dev continues to work
+    """
+
+    # ── Try Redis first ───────────────────────────────────────────────────
+    try:
+        SESSION_STORE.set_session(session_id, {"user_email": user_email})
+        SESSION_STORE.add_user_session(user_email, session_id)
+    except Exception as e:  # pragma: no cover – Redis unavailable or dummy
+        logger.debug("Redis session store set failed: %s", e)
+
+    # ── Always mirror into SQLite for backward compatibility ─────────────
     conn = sqlite3.connect("user_data.db")
     c = conn.cursor()
-    c.execute('''
+    c.execute(
+        """
         INSERT OR REPLACE INTO browser_sessions (session_id, user_email, last_accessed)
         VALUES (?, ?, CURRENT_TIMESTAMP)
-    ''', (session_id, user_email))
+        """,
+        (session_id, user_email),
+    )
     conn.commit()
     conn.close()
 
     # keep mirror in the in-memory map so /get_browser_sessions works
-    now = datetime.utcnow()
     browser_sessions[session_id] = {
         "user_email": user_email,
         "status": "completed",
@@ -808,32 +835,64 @@ def store_browser_session(session_id: str, user_email: str):
     }
 
 def get_session_user(session_id: str) -> str:
-    """Get user email for a browser session"""
+    """Return user mapped to a session ID (Redis → SQLite fallback)."""
+
+    # 1) Redis fast-path
+    try:
+        data = SESSION_STORE.get_session(session_id)
+        if data and isinstance(data, dict):
+            return data.get("user_email")
+    except Exception as e:
+        logger.debug("Redis get_session failed: %s", e)
+
+    # 2) sqlite fallback
     conn = sqlite3.connect("user_data.db")
     c = conn.cursor()
-    c.execute('SELECT user_email FROM browser_sessions WHERE session_id = ?', (session_id,))
+    c.execute("SELECT user_email FROM browser_sessions WHERE session_id = ?", (session_id,))
     result = c.fetchone()
     conn.close()
     return result[0] if result else None
 
 def get_user_sessions(user_email: str) -> List[str]:
-    """Get all browser sessions for a user"""
+    """Return list of browser session IDs associated with a user."""
+
+    # Prefer Redis because it is O(1) and globally consistent
+    try:
+        sessions = SESSION_STORE.get_user_sessions(user_email)
+        if sessions:
+            return sessions
+    except Exception as e:
+        logger.debug("Redis get_user_sessions failed: %s", e)
+
+    # Fallback to sqlite
     conn = sqlite3.connect("user_data.db")
     c = conn.cursor()
-    c.execute('SELECT session_id FROM browser_sessions WHERE user_email = ?', (user_email,))
+    c.execute("SELECT session_id FROM browser_sessions WHERE user_email = ?", (user_email,))
     results = c.fetchall()
     conn.close()
     return [r[0] for r in results]
 
 def delete_browser_session(session_id: str, user_email: str = None):
-    """Delete a specific browser session"""
+    """Delete session mapping from all stores."""
+
+    # Redis first
+    try:
+        SESSION_STORE.delete_session(session_id)
+        if user_email:
+            SESSION_STORE.remove_user_session(user_email, session_id)
+    except Exception as e:
+        logger.debug("Redis delete_session failed: %s", e)
+
+    # sqlite mirror
     conn = sqlite3.connect("user_data.db")
     c = conn.cursor()
     if user_email:
-        c.execute('DELETE FROM browser_sessions WHERE session_id = ? AND user_email = ?', 
-                 (session_id, user_email))
+        c.execute(
+            "DELETE FROM browser_sessions WHERE session_id = ? AND user_email = ?",
+            (session_id, user_email),
+        )
     else:
-        c.execute('DELETE FROM browser_sessions WHERE session_id = ?', (session_id,))
+        c.execute("DELETE FROM browser_sessions WHERE session_id = ?", (session_id,))
     conn.commit()
     conn.close()
 

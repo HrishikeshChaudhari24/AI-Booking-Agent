@@ -14,6 +14,10 @@ google-auth-httplib2>=0.2      # pulled by api-client but list explicitly
 # ── Language-model SDKs ─────────────────────────────────────
 google-generativeai>=0.3
 groq>=0.2
+
+# ── Session storage back-end ───────────────────────────────────────────
+redis>=5.0
+cryptography>=42.0
 langgraph>=0.0.24
 
 # ── Utility libraries ───────────────────────────────────────
