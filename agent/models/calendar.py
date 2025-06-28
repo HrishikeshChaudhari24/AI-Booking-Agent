@@ -105,14 +105,26 @@ def _ensure_credentials_file() -> None:
     if os.path.exists(CREDENTIALS_FILE):
         return
     
-    # Debug: Log all available secrets
+    # Debug: Log all available secrets (using both logger AND streamlit for visibility)
+    print("=== DEBUGGING SECRETS ===")  # This will show in console/logs
+    st.write("=== DEBUGGING SECRETS ===")  # This will show in Streamlit UI
     logger.info("=== DEBUGGING SECRETS ===")
+    
     try:
-        logger.info(f"Available secrets keys: {list(st.secrets.keys())}")
+        secrets_keys = list(st.secrets.keys())
+        print(f"Available secrets keys: {secrets_keys}")
+        st.write(f"Available secrets keys: {secrets_keys}")
+        logger.info(f"Available secrets keys: {secrets_keys}")
+        
         for key in st.secrets.keys():
             if 'GOOGLE' in key.upper():
-                logger.info(f"Secret {key}: {st.secrets[key]}")
+                secret_value = st.secrets[key]
+                print(f"Secret {key}: {secret_value}")
+                st.write(f"Secret {key}: {secret_value}")
+                logger.info(f"Secret {key}: {secret_value}")
     except Exception as e:
+        print(f"Error accessing secrets: {e}")
+        st.error(f"Error accessing secrets: {e}")
         logger.error(f"Error accessing secrets: {e}")
     
     creds_blob = None
@@ -120,16 +132,23 @@ def _ensure_credentials_file() -> None:
     # Try to load from secrets
     try:
         creds_blob = st.secrets['GOOGLE_CREDENTIALS_JSON']
+        print(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
+        st.write(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
         logger.info(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
         st.success("Credentials loaded successfully!")
     except KeyError:
+        print("GOOGLE_CREDENTIALS_JSON not found in secrets")
+        st.warning("GOOGLE_CREDENTIALS_JSON not found in secrets")
         logger.warning("GOOGLE_CREDENTIALS_JSON not found in secrets")
     except Exception as e:
-        logger.error(f"Failed to parse credentials: {e}")
+        print(f"Failed to parse credentials: {e}")
         st.error(f"Failed to parse credentials: {e}")
+        logger.error(f"Failed to parse credentials: {e}")
     
     # Try to construct from individual secrets if full blob is missing or invalid
     if not creds_blob:
+        print("Attempting to build credentials from individual secrets...")
+        st.write("Attempting to build credentials from individual secrets...")
         logger.info("Attempting to build credentials from individual secrets...")
         try:
             # Log each piece individually
@@ -141,6 +160,24 @@ def _ensure_credentials_file() -> None:
             client_secret = st.secrets.get('GOOGLE_OAUTH_CLIENT_SECRET', None)
             redirect_uris = st.secrets.get('GOOGLE_OAUTH_REDIRECT_URIS', None)
             js_origins = st.secrets.get('GOOGLE_OAUTH_JS_ORIGINS', None)
+            
+            print(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
+            print(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
+            print(f"GOOGLE_OAUTH_AUTH_URI: {auth_uri}")
+            print(f"GOOGLE_OAUTH_TOKEN_URI: {token_uri}")
+            print(f"GOOGLE_OAUTH_CERTS_URI: {certs_uri}")
+            print(f"GOOGLE_OAUTH_CLIENT_SECRET: {client_secret}")
+            print(f"GOOGLE_OAUTH_REDIRECT_URIS: {redirect_uris}")
+            print(f"GOOGLE_OAUTH_JS_ORIGINS: {js_origins}")
+            
+            st.write(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
+            st.write(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
+            st.write(f"GOOGLE_OAUTH_AUTH_URI: {auth_uri}")
+            st.write(f"GOOGLE_OAUTH_TOKEN_URI: {token_uri}")
+            st.write(f"GOOGLE_OAUTH_CERTS_URI: {certs_uri}")
+            st.write(f"GOOGLE_OAUTH_CLIENT_SECRET: {client_secret}")
+            st.write(f"GOOGLE_OAUTH_REDIRECT_URIS: {redirect_uris}")
+            st.write(f"GOOGLE_OAUTH_JS_ORIGINS: {js_origins}")
             
             logger.info(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
             logger.info(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
@@ -186,6 +223,7 @@ def _ensure_credentials_file() -> None:
         logger.exception(f"Failed to write credentials.json to disk: {e}")
     
     logger.info("=== END DEBUGGING SECRETS ===")
+
 
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
