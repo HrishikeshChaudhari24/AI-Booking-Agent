@@ -1260,3 +1260,13 @@ def _periodic_cleanup():
 
 threading.Thread(target=_periodic_cleanup, daemon=True).start() 
 
+# ---------------------------------------------------------------------------
+# Root path – redirect to interactive docs so hitting the base URL is useful
+# ---------------------------------------------------------------------------
+
+
+@app.get("/")
+async def root():  # pragma: no cover – simple convenience route
+    """Redirect bare URL to /docs swagger UI."""
+    return RedirectResponse("/docs")
+
