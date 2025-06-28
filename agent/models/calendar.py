@@ -122,12 +122,12 @@ def _ensure_credentials_file() -> None:
             print(f"Secrets under 'default': {list(default_secrets.keys())}")
             st.write(f"Secrets under 'default': {list(default_secrets.keys())}")
             
+            # Print ALL keys in default, even if they don't contain GOOGLE
             for key in default_secrets.keys():
-                if 'GOOGLE' in key.upper():
-                    secret_value = default_secrets[key]
-                    print(f"Secret default.{key}: {secret_value}")
-                    st.write(f"Secret default.{key}: {secret_value}")
-                    logger.info(f"Secret default.{key}: {secret_value}")
+                secret_value = default_secrets[key]
+                print(f"Secret default.{key}: {secret_value}")
+                st.write(f"Secret default.{key}: {secret_value}")
+                logger.info(f"Secret default.{key}: {secret_value}")
         
         # Also check top-level secrets
         for key in st.secrets.keys():
@@ -253,6 +253,7 @@ def _ensure_credentials_file() -> None:
         logger.exception(f"Failed to write credentials.json to disk: {e}")
     
     logger.info("=== END DEBUGGING SECRETS ===")
+
 
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
