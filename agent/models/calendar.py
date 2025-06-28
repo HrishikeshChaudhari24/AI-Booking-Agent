@@ -29,7 +29,7 @@ def get_secret(key: str, default: str | None = ""):
     Streamlit front-end locally or on Streamlit Cloud.
     """
     # 1) Environment variable (preferred for Railway / Docker)
-    env_val = os.getenv(key)
+    env_val = os.getenv("key")
     if env_val not in (None, ""):
         return env_val
 
