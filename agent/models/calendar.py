@@ -41,16 +41,120 @@ REDIRECT_URI = st.secrets.get("OAUTH_REDIRECT_URI", os.getenv("OAUTH_REDIRECT_UR
 # Ensure credentials file exists from environment secret
 # ---------------------------------------------------------------------------
 
-_creds_from_env = st.secrets.get("GOOGLE_CREDENTIALS_JSON", os.getenv("GOOGLE_CREDENTIALS_JSON"))
-if _creds_from_env and not os.path.exists(CREDENTIALS_FILE):
+def _ensure_credentials_file() -> None:
+    """Write credentials.json from secrets/env if it is missing."""
+    if os.path.exists(CREDENTIALS_FILE):
+        return
+    
+    logger.info("credentials.json not found, attempting to create from secrets...")
+    
+    creds_blob = None
+    
+    # Try to load GOOGLE_CREDENTIALS_JSON from secrets
     try:
-        # Create parent dir if needed
+        # Try both direct access and default key access
+        if 'GOOGLE_CREDENTIALS_JSON' in st.secrets:
+            creds_json_str = st.secrets['GOOGLE_CREDENTIALS_JSON']
+        elif 'default' in st.secrets and 'GOOGLE_CREDENTIALS_JSON' in st.secrets['default']:
+            creds_json_str = st.secrets['default']['GOOGLE_CREDENTIALS_JSON']
+        else:
+            raise KeyError("GOOGLE_CREDENTIALS_JSON not found")
+            
+        # Parse the JSON string
+        if isinstance(creds_json_str, str):
+            creds_blob = json.loads(creds_json_str)
+        else:
+            creds_blob = creds_json_str
+            
+        logger.info("GOOGLE_CREDENTIALS_JSON successfully loaded from secrets")
+        
+    except KeyError:
+        logger.warning("GOOGLE_CREDENTIALS_JSON not found in secrets, trying individual components...")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse GOOGLE_CREDENTIALS_JSON: {e}")
+    except Exception as e:
+        logger.error(f"Failed to load GOOGLE_CREDENTIALS_JSON: {e}")
+    
+    # Try to construct from individual secrets if full blob is missing or invalid
+    if not creds_blob:
+        logger.info("Attempting to build credentials from individual OAuth secrets...")
+        try:
+            # Helper function to get secret value
+            def get_secret(key):
+                if key in st.secrets:
+                    return st.secrets[key]
+                elif 'default' in st.secrets and key in st.secrets['default']:
+                    return st.secrets['default'][key]
+                else:
+                    return None
+            
+            # Get OAuth components
+            client_id = get_secret('GOOGLE_OAUTH_CLIENT_ID')
+            project_id = get_secret('GOOGLE_OAUTH_PROJECT_ID')
+            auth_uri = get_secret('GOOGLE_OAUTH_AUTH_URI') or "https://accounts.google.com/o/oauth2/auth"
+            token_uri = get_secret('GOOGLE_OAUTH_TOKEN_URI') or "https://oauth2.googleapis.com/token"
+            certs_uri = get_secret('GOOGLE_OAUTH_CERTS_URI') or "https://www.googleapis.com/oauth2/v1/certs"
+            client_secret = get_secret('GOOGLE_OAUTH_CLIENT_SECRET')
+            redirect_uris = get_secret('GOOGLE_OAUTH_REDIRECT_URIS')
+            js_origins = get_secret('GOOGLE_OAUTH_JS_ORIGINS')
+            
+            # Parse redirect URIs and JS origins if they're strings
+            if isinstance(redirect_uris, str):
+                redirect_uris = [uri.strip() for uri in redirect_uris.split(',')]
+            if isinstance(js_origins, str):
+                js_origins = [origin.strip() for origin in js_origins.split(',')]
+            
+            # Build the OAuth client configuration
+            if client_id and client_secret:
+                oauth_config = {
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "auth_uri": auth_uri,
+                    "token_uri": token_uri,
+                    "auth_provider_x509_cert_url": certs_uri,
+                }
+                
+                # Add optional fields
+                if project_id:
+                    oauth_config["project_id"] = project_id
+                if redirect_uris:
+                    oauth_config["redirect_uris"] = redirect_uris
+                if js_origins:
+                    oauth_config["javascript_origins"] = js_origins
+                
+                # Wrap in the expected structure
+                creds_blob = {"web": oauth_config}
+                logger.info("Successfully constructed OAuth configuration from individual secrets")
+            else:
+                logger.error("Missing required OAuth components: client_id and/or client_secret")
+                return
+                
+        except Exception as e:
+            logger.exception(f"Failed to build credentials from individual secrets: {e}")
+            return
+    
+    # Validate the credentials structure
+    if not creds_blob:
+        logger.error("No valid credentials configuration found")
+        return
+    
+    # Ensure it has the expected structure
+    if "web" not in creds_blob and "installed" not in creds_blob:
+        logger.error("Invalid credentials structure - missing 'web' or 'installed' key")
+        return
+    
+    # Write to file
+    try:
         os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
-        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as _f:
-            _f.write(_creds_from_env)
-        logger.info("credentials.json written to %s from env", CREDENTIALS_FILE)
-    except Exception as _e:
-        logger.exception("Failed to write credentials file: %s", _e)
+        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
+            json.dump(creds_blob, f, indent=2)
+        logger.info(f"credentials.json created successfully at {CREDENTIALS_FILE}")
+    except Exception as e:
+        logger.exception(f"Failed to write credentials.json to disk: {e}")
+        return
+
+# Initialize credentials file on module load
+_ensure_credentials_file()
 
 # ---------------------------------------------------------------------------
 # Token helpers
@@ -99,161 +203,6 @@ def get_calendar_service(user_email: str):
 # ---------------------------------------------------------------------------
 # OAuth helpers
 # ---------------------------------------------------------------------------
-
-def _ensure_credentials_file() -> None:
-    """Write credentials.json from secrets/env if it is missing."""
-    if os.path.exists(CREDENTIALS_FILE):
-        return
-    
-    # Debug: Log all available secrets (using both logger AND streamlit for visibility)
-    print("=== DEBUGGING SECRETS ===")  # This will show in console/logs
-    st.write("=== DEBUGGING SECRETS ===")  # This will show in Streamlit UI
-    logger.info("=== DEBUGGING SECRETS ===")
-    
-    try:
-        secrets_keys = list(st.secrets.keys())
-        print(f"Available secrets keys: {secrets_keys}")
-        st.write(f"Available secrets keys: {secrets_keys}")
-        logger.info(f"Available secrets keys: {secrets_keys}")
-        
-        # Check if secrets are under 'default' key
-        if 'default' in st.secrets:
-            default_secrets = st.secrets['default']
-            print(f"Secrets under 'default': {list(default_secrets.keys())}")
-            st.write(f"Secrets under 'default': {list(default_secrets.keys())}")
-            
-            # Print ALL keys in default, even if they don't contain GOOGLE
-            for key in default_secrets.keys():
-                secret_value = default_secrets[key]
-                print(f"Secret default.{key}: {secret_value}")
-                st.write(f"Secret default.{key}: {secret_value}")
-                logger.info(f"Secret default.{key}: {secret_value}")
-        
-        # Also check top-level secrets
-        for key in st.secrets.keys():
-            if 'GOOGLE' in key.upper():
-                secret_value = st.secrets[key]
-                print(f"Secret {key}: {secret_value}")
-                st.write(f"Secret {key}: {secret_value}")
-                logger.info(f"Secret {key}: {secret_value}")
-    except Exception as e:
-        print(f"Error accessing secrets: {e}")
-        st.error(f"Error accessing secrets: {e}")
-        logger.error(f"Error accessing secrets: {e}")
-    
-    creds_blob = None
-    
-    # Try to load from secrets
-    try:
-        # Try both direct access and default key access
-        if 'GOOGLE_CREDENTIALS_JSON' in st.secrets:
-            creds_blob = st.secrets['GOOGLE_CREDENTIALS_JSON']
-        elif 'default' in st.secrets and 'GOOGLE_CREDENTIALS_JSON' in st.secrets['default']:
-            creds_blob = st.secrets['default']['GOOGLE_CREDENTIALS_JSON']
-        else:
-            raise KeyError("GOOGLE_CREDENTIALS_JSON not found")
-            
-        print(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
-        st.write(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
-        logger.info(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
-        st.success("Credentials loaded successfully!")
-    except KeyError:
-        print("GOOGLE_CREDENTIALS_JSON not found in secrets")
-        st.warning("GOOGLE_CREDENTIALS_JSON not found in secrets")
-        logger.warning("GOOGLE_CREDENTIALS_JSON not found in secrets")
-    except Exception as e:
-        print(f"Failed to parse credentials: {e}")
-        st.error(f"Failed to parse credentials: {e}")
-        logger.error(f"Failed to parse credentials: {e}")
-    
-    # Try to construct from individual secrets if full blob is missing or invalid
-    if not creds_blob:
-        print("Attempting to build credentials from individual secrets...")
-        st.write("Attempting to build credentials from individual secrets...")
-        logger.info("Attempting to build credentials from individual secrets...")
-        try:
-            # Helper function to get secret value
-            def get_secret(key):
-                if key in st.secrets:
-                    return st.secrets[key]
-                elif 'default' in st.secrets and key in st.secrets['default']:
-                    return st.secrets['default'][key]
-                else:
-                    return None
-            
-            # Log each piece individually
-            client_id = get_secret('GOOGLE_OAUTH_CLIENT_ID')
-            project_id = get_secret('GOOGLE_OAUTH_PROJECT_ID')
-            auth_uri = get_secret('GOOGLE_OAUTH_AUTH_URI')
-            token_uri = get_secret('GOOGLE_OAUTH_TOKEN_URI')
-            certs_uri = get_secret('GOOGLE_OAUTH_CERTS_URI')
-            client_secret = get_secret('GOOGLE_OAUTH_CLIENT_SECRET')
-            redirect_uris = get_secret('GOOGLE_OAUTH_REDIRECT_URIS')
-            js_origins = get_secret('GOOGLE_OAUTH_JS_ORIGINS')
-            
-            print(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
-            print(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
-            print(f"GOOGLE_OAUTH_AUTH_URI: {auth_uri}")
-            print(f"GOOGLE_OAUTH_TOKEN_URI: {token_uri}")
-            print(f"GOOGLE_OAUTH_CERTS_URI: {certs_uri}")
-            print(f"GOOGLE_OAUTH_CLIENT_SECRET: {client_secret}")
-            print(f"GOOGLE_OAUTH_REDIRECT_URIS: {redirect_uris}")
-            print(f"GOOGLE_OAUTH_JS_ORIGINS: {js_origins}")
-            
-            st.write(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
-            st.write(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
-            st.write(f"GOOGLE_OAUTH_AUTH_URI: {auth_uri}")
-            st.write(f"GOOGLE_OAUTH_TOKEN_URI: {token_uri}")
-            st.write(f"GOOGLE_OAUTH_CERTS_URI: {certs_uri}")
-            st.write(f"GOOGLE_OAUTH_CLIENT_SECRET: {client_secret}")
-            st.write(f"GOOGLE_OAUTH_REDIRECT_URIS: {redirect_uris}")
-            st.write(f"GOOGLE_OAUTH_JS_ORIGINS: {js_origins}")
-            
-            logger.info(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
-            logger.info(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
-            logger.info(f"GOOGLE_OAUTH_AUTH_URI: {auth_uri}")
-            logger.info(f"GOOGLE_OAUTH_TOKEN_URI: {token_uri}")
-            logger.info(f"GOOGLE_OAUTH_CERTS_URI: {certs_uri}")
-            logger.info(f"GOOGLE_OAUTH_CLIENT_SECRET: {client_secret}")
-            logger.info(f"GOOGLE_OAUTH_REDIRECT_URIS: {redirect_uris}")
-            logger.info(f"GOOGLE_OAUTH_JS_ORIGINS: {js_origins}")
-            
-            pieces = {
-                "client_id": client_id,
-                "project_id": project_id,
-                "auth_uri": auth_uri,
-                "token_uri": token_uri,
-                "auth_provider_x509_cert_url": certs_uri,
-                "client_secret": client_secret,
-                "redirect_uris": redirect_uris,
-                "javascript_origins": js_origins,
-            }
-            
-            logger.info(f"Constructed pieces: {pieces}")
-            
-            if pieces["client_id"] and pieces["client_secret"]:
-                creds_blob = {"web": pieces}
-                logger.info(f"Successfully constructed creds_blob: {creds_blob}")
-            else:
-                logger.error("Insufficient discrete OAuth pieces to build credentials.json")
-                logger.error(f"Missing: client_id={not pieces['client_id']}, client_secret={not pieces['client_secret']}")
-                return
-        except Exception as e:
-            logger.exception(f"Failed to build credentials from discrete secrets: {e}")
-            return
-    
-    # Write to file
-    try:
-        os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
-        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
-            f.write(json.dumps(creds_blob, indent=2))
-        logger.info(f"credentials.json created at {CREDENTIALS_FILE}")
-        logger.info(f"File contents: {json.dumps(creds_blob, indent=2)}")
-    except Exception as e:
-        logger.exception(f"Failed to write credentials.json to disk: {e}")
-    
-    logger.info("=== END DEBUGGING SECRETS ===")
-
 
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
