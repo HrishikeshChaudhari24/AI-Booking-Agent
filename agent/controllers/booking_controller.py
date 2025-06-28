@@ -799,6 +799,14 @@ def store_browser_session(session_id: str, user_email: str):
     conn.commit()
     conn.close()
 
+    # keep mirror in the in-memory map so /get_browser_sessions works
+    now = datetime.utcnow()
+    browser_sessions[session_id] = {
+        "user_email": user_email,
+        "status": "completed",
+        "auth_url": "",
+    }
+
 def get_session_user(session_id: str) -> str:
     """Get user email for a browser session"""
     conn = sqlite3.connect("user_data.db")
@@ -1269,4 +1277,91 @@ threading.Thread(target=_periodic_cleanup, daemon=True).start()
 async def root():  # pragma: no cover – simple convenience route
     """Redirect bare URL to /docs swagger UI."""
     return RedirectResponse("/docs")
+
+# ---------------------------------------------------------------------------
+# Enhanced browser-session models (in-memory, optional to persist to DB)
+# ---------------------------------------------------------------------------
+
+
+class BrowserInfo(BaseModel):
+    """Minimal fingerprint data sent by the front-end when it tries to restore a session."""
+
+    user_agent: str = "unknown"
+    screen_resolution: str = "unknown"
+    timezone: str = "unknown"
+
+
+class SessionData(BaseModel):
+    """Lightweight session record kept in memory for quick lookup."""
+
+    user_email: str | None = None
+    browser_session_id: str
+    authorized: bool = False
+    created_at: datetime = datetime.utcnow()
+    last_activity: datetime = datetime.utcnow()
+    browser_fingerprint: str | None = None
+
+
+def _generate_browser_fingerprint(info: BrowserInfo) -> str:
+    """Create a stable hash from BrowserInfo fields."""
+
+    raw = f"{info.user_agent}|{info.screen_resolution}|{info.timezone}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+# in-memory mappings (kept separate from the SQLite mapping we already use)
+browser_session_meta: dict[str, SessionData] = {}
+
+
+def _cleanup_expired_browser_meta() -> None:
+    """Remove sessions older than 30 days from the in-memory map."""
+
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    for sid in list(browser_session_meta.keys()):
+        if browser_session_meta[sid].last_activity < cutoff:
+            browser_session_meta.pop(sid, None)
+
+
+# ---------------------------------------------------------------------------
+# Admin / helper endpoints for session debugging
+# ---------------------------------------------------------------------------
+
+
+@app.get("/get_browser_sessions")
+async def get_browser_sessions():
+    """Return in-memory browser sessions (debug)."""
+
+    _cleanup_expired_browser_meta()
+    payload: list[dict[str, Any]] = []
+    for sid, meta in browser_session_meta.items():
+        payload.append(
+            {
+                "session_id": sid,
+                "user_email": meta.user_email,
+                "authorized": meta.authorized,
+                "created_at": meta.created_at.isoformat(),
+                "last_activity": meta.last_activity.isoformat(),
+            }
+        )
+    return {"sessions": payload}
+
+
+@app.post("/restore_session")
+async def restore_session(info: BrowserInfo):
+    """Attempt to restore session by browser fingerprint after hard refresh."""
+
+    _cleanup_expired_browser_meta()
+    fp = _generate_browser_fingerprint(info)
+    for sid, meta in browser_session_meta.items():
+        if meta.browser_fingerprint == fp and meta.authorized and meta.user_email:
+            meta.last_activity = datetime.utcnow()
+            browser_session_meta[sid] = meta
+            return {
+                "session_found": True,
+                "session_id": sid,
+                "user_email": meta.user_email,
+                "authorized": True,
+            }
+
+    return {"session_found": False}
 
