@@ -105,35 +105,74 @@ def _ensure_credentials_file() -> None:
     if os.path.exists(CREDENTIALS_FILE):
         return
     
+    # Debug: Log all available secrets
+    logger.info("=== DEBUGGING SECRETS ===")
+    try:
+        logger.info(f"Available secrets keys: {list(st.secrets.keys())}")
+        for key in st.secrets.keys():
+            if 'GOOGLE' in key.upper():
+                logger.info(f"Secret {key}: {st.secrets[key]}")
+    except Exception as e:
+        logger.error(f"Error accessing secrets: {e}")
+    
     creds_blob = None
     
     # Try to load from secrets
     try:
         creds_blob = st.secrets['GOOGLE_CREDENTIALS_JSON']
+        logger.info(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
         st.success("Credentials loaded successfully!")
+    except KeyError:
+        logger.warning("GOOGLE_CREDENTIALS_JSON not found in secrets")
     except Exception as e:
+        logger.error(f"Failed to parse credentials: {e}")
         st.error(f"Failed to parse credentials: {e}")
     
     # Try to construct from individual secrets if full blob is missing or invalid
     if not creds_blob:
+        logger.info("Attempting to build credentials from individual secrets...")
         try:
+            # Log each piece individually
+            client_id = st.secrets.get('GOOGLE_OAUTH_CLIENT_ID', None)
+            project_id = st.secrets.get('GOOGLE_OAUTH_PROJECT_ID', None)
+            auth_uri = st.secrets.get('GOOGLE_OAUTH_AUTH_URI', None)
+            token_uri = st.secrets.get('GOOGLE_OAUTH_TOKEN_URI', None)
+            certs_uri = st.secrets.get('GOOGLE_OAUTH_CERTS_URI', None)
+            client_secret = st.secrets.get('GOOGLE_OAUTH_CLIENT_SECRET', None)
+            redirect_uris = st.secrets.get('GOOGLE_OAUTH_REDIRECT_URIS', None)
+            js_origins = st.secrets.get('GOOGLE_OAUTH_JS_ORIGINS', None)
+            
+            logger.info(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
+            logger.info(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
+            logger.info(f"GOOGLE_OAUTH_AUTH_URI: {auth_uri}")
+            logger.info(f"GOOGLE_OAUTH_TOKEN_URI: {token_uri}")
+            logger.info(f"GOOGLE_OAUTH_CERTS_URI: {certs_uri}")
+            logger.info(f"GOOGLE_OAUTH_CLIENT_SECRET: {client_secret}")
+            logger.info(f"GOOGLE_OAUTH_REDIRECT_URIS: {redirect_uris}")
+            logger.info(f"GOOGLE_OAUTH_JS_ORIGINS: {js_origins}")
+            
             pieces = {
-                "client_id": st.secrets.GOOGLE_OAUTH_CLIENT_ID,
-                "project_id": st.secrets.GOOGLE_OAUTH_PROJECT_ID,
-                "auth_uri": st.secrets.GOOGLE_OAUTH_AUTH_URI,
-                "token_uri": st.secrets.GOOGLE_OAUTH_TOKEN_URI,
-                "auth_provider_x509_cert_url": st.secrets.GOOGLE_OAUTH_CERTS_URI,
-                "client_secret": st.secrets.GOOGLE_OAUTH_CLIENT_SECRET,
-                "redirect_uris": st.secrets.GOOGLE_OAUTH_REDIRECT_URIS,
-                "javascript_origins": st.secrets.GOOGLE_OAUTH_JS_ORIGINS,
+                "client_id": client_id,
+                "project_id": project_id,
+                "auth_uri": auth_uri,
+                "token_uri": token_uri,
+                "auth_provider_x509_cert_url": certs_uri,
+                "client_secret": client_secret,
+                "redirect_uris": redirect_uris,
+                "javascript_origins": js_origins,
             }
+            
+            logger.info(f"Constructed pieces: {pieces}")
+            
             if pieces["client_id"] and pieces["client_secret"]:
                 creds_blob = {"web": pieces}
+                logger.info(f"Successfully constructed creds_blob: {creds_blob}")
             else:
                 logger.error("Insufficient discrete OAuth pieces to build credentials.json")
+                logger.error(f"Missing: client_id={not pieces['client_id']}, client_secret={not pieces['client_secret']}")
                 return
-        except Exception:
-            logger.exception("Failed to build credentials from discrete secrets")
+        except Exception as e:
+            logger.exception(f"Failed to build credentials from discrete secrets: {e}")
             return
     
     # Write to file
@@ -141,10 +180,12 @@ def _ensure_credentials_file() -> None:
         os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
         with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
             f.write(json.dumps(creds_blob, indent=2))
-        logger.info("credentials.json created at %s", CREDENTIALS_FILE)
-    except Exception:
-        logger.exception("Failed to write credentials.json to disk")
-
+        logger.info(f"credentials.json created at {CREDENTIALS_FILE}")
+        logger.info(f"File contents: {json.dumps(creds_blob, indent=2)}")
+    except Exception as e:
+        logger.exception(f"Failed to write credentials.json to disk: {e}")
+    
+    logger.info("=== END DEBUGGING SECRETS ===")
 
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
