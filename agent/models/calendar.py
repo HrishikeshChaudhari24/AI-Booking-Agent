@@ -17,27 +17,8 @@ from dateutil import parser
 import sqlite3
 import logging
 
-
-from .database import (
-    user_credentials,
-    cleanup_expired_credentials,
-    load_user_credentials,
-    store_user_credentials,
-    delete_user_credentials,
-)
-
-logger = logging.getLogger(__name__)
-
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
-# Resolve project root (two levels up from this file)
-_ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
-# Allow override via environment variable; otherwise look in root dir
-CREDENTIALS_FILE = os.path.abspath(
-    os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credentials.json"))
-)
-
 # ---------------------------------------------------------------------------
-# Unified secret getter (Streamlit-aware but safe when secrets.toml is absent)
+# Secret management helper (must be defined before use)
 # ---------------------------------------------------------------------------
 
 def get_secret(key: str, default: str | None = ""):
@@ -64,6 +45,28 @@ def get_secret(key: str, default: str | None = ""):
         pass
 
     return os.getenv(key, default)
+
+# ---------------------------------------------------------------------------
+# Module setup
+# ---------------------------------------------------------------------------
+
+from .database import (
+    user_credentials,
+    cleanup_expired_credentials,
+    load_user_credentials,
+    store_user_credentials,
+    delete_user_credentials,
+)
+
+logger = logging.getLogger(__name__)
+
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
+# Resolve project root (two levels up from this file)
+_ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
+# Allow override via environment variable; otherwise look in root dir
+CREDENTIALS_FILE = os.path.abspath(
+    os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credentials.json"))
+)
 
 # Prefer explicit environment variable, else fall back to Streamlit secrets or default URL
 REDIRECT_URI = os.getenv(
@@ -97,15 +100,6 @@ def _ensure_credentials_file() -> None:
     if not creds_blob:
         logger.info("Attempting to build credentials from individual OAuth secrets...")
         try:
-            # Helper function to get secret value
-            def get_secret(key):
-                if key in st.secrets:
-                    return st.secrets[key]
-                elif 'default' in st.secrets and key in st.secrets['default']:
-                    return st.secrets['default'][key]
-                else:
-                    return None
-            
             # Get OAuth components
             client_id = get_secret('GOOGLE_OAUTH_CLIENT_ID')
             project_id = get_secret('GOOGLE_OAUTH_PROJECT_ID')
