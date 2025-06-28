@@ -70,7 +70,21 @@ load_dotenv()  # Loads variables from a .env file into process env, if present
 
 def get_secret(key: str, default: str = "") -> str:
     """Return secret from st.secrets if present else from OS env."""
-    return st.secrets.get(key, os.getenv(key, default))
+    try:
+        import streamlit as _st  # local import to avoid hard dependency
+        try:
+            if key in _st.secrets:
+                return _st.secrets[key]
+            if "default" in _st.secrets and key in _st.secrets["default"]:
+                return _st.secrets["default"][key]
+        except Exception:
+            # Any secrets access error -> fall back to env
+            pass
+    except ModuleNotFoundError:
+        # streamlit not installed -> use env only
+        pass
+    
+    return os.getenv(key, default)
 
 # ---------------------------------------------------------------------------
 # Ensure credentials.json exists BEFORE OAuth calls (redundant fallback)
