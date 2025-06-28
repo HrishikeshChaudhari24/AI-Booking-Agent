@@ -35,7 +35,41 @@ _ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
 CREDENTIALS_FILE = os.path.abspath(
     os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credentials.json"))
 )
-REDIRECT_URI = st.secrets.get("OAUTH_REDIRECT_URI", os.getenv("OAUTH_REDIRECT_URI", "https://ai-booking-agent-efd.streamlit.app/callback"))
+
+# ---------------------------------------------------------------------------
+# Unified secret getter (Streamlit-aware but safe when secrets.toml is absent)
+# ---------------------------------------------------------------------------
+
+def get_secret(key: str, default: str | None = ""):
+    """Return secret from Streamlit secrets if available, else from OS env.
+
+    Accessing st.secrets when no secrets.toml exists raises
+    StreamlitSecretNotFoundError. This helper catches that so the backend can
+    still start when only environment variables are provided (e.g. on
+    Railway/Render).
+    """
+    try:
+        import streamlit as _st  # local import to avoid hard dependency at runtime
+
+        try:
+            if key in _st.secrets:
+                return _st.secrets[key]
+            if "default" in _st.secrets and key in _st.secrets["default"]:
+                return _st.secrets["default"][key]
+        except Exception:
+            # Any lookup/parsing errors -> fall back to env
+            pass
+    except ModuleNotFoundError:
+        # streamlit not installed in backend-only builds
+        pass
+
+    return os.getenv(key, default)
+
+# Prefer explicit environment variable, else fall back to Streamlit secrets or default URL
+REDIRECT_URI = os.getenv(
+    "OAUTH_REDIRECT_URI",
+    get_secret("OAUTH_REDIRECT_URI", "https://ai-booking-agent-efd.streamlit.app/callback"),
+)
 
 # ---------------------------------------------------------------------------
 # Ensure credentials file exists from environment secret
@@ -48,32 +82,16 @@ def _ensure_credentials_file() -> None:
     
     logger.info("credentials.json not found, attempting to create from secrets...")
     
-    creds_blob = None
+    creds_blob: dict | None = None
     
-    # Try to load GOOGLE_CREDENTIALS_JSON from secrets
-    try:
-        # Try both direct access and default key access
-        if 'GOOGLE_CREDENTIALS_JSON' in st.secrets:
-            creds_json_str = st.secrets['GOOGLE_CREDENTIALS_JSON']
-        elif 'default' in st.secrets and 'GOOGLE_CREDENTIALS_JSON' in st.secrets['default']:
-            creds_json_str = st.secrets['default']['GOOGLE_CREDENTIALS_JSON']
-        else:
-            raise KeyError("GOOGLE_CREDENTIALS_JSON not found")
-            
-        # Parse the JSON string
-        if isinstance(creds_json_str, str):
-            creds_blob = json.loads(creds_json_str)
-        else:
-            creds_blob = creds_json_str
-            
-        logger.info("GOOGLE_CREDENTIALS_JSON successfully loaded from secrets")
-        
-    except KeyError:
-        logger.warning("GOOGLE_CREDENTIALS_JSON not found in secrets, trying individual components...")
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse GOOGLE_CREDENTIALS_JSON: {e}")
-    except Exception as e:
-        logger.error(f"Failed to load GOOGLE_CREDENTIALS_JSON: {e}")
+    # 1) Attempt to load GOOGLE_CREDENTIALS_JSON from secrets/env
+    creds_json_str = get_secret("GOOGLE_CREDENTIALS_JSON", None)
+    if creds_json_str:
+        try:
+            creds_blob = json.loads(creds_json_str) if isinstance(creds_json_str, str) else creds_json_str
+            logger.info("GOOGLE_CREDENTIALS_JSON successfully loaded from secret/env var")
+        except Exception as e:
+            logger.error("Failed to parse GOOGLE_CREDENTIALS_JSON: %s", e)
     
     # Try to construct from individual secrets if full blob is missing or invalid
     if not creds_blob:
