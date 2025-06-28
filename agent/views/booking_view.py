@@ -19,8 +19,8 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os
 if ROOT_DIR not in sys.path:
     sys.path.append(ROOT_DIR)
 
-BACKEND = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8080")
-
+# BACKEND = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8080")
+BACKEND=st.secrets["BACKEND_BASE_URL"]
 # ---------------------------------------------------------------------------
 # Cookie Management Functions
 # ---------------------------------------------------------------------------
