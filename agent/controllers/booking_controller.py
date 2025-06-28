@@ -77,34 +77,50 @@ def get_secret(key: str, default: str = "") -> str:
                 return _st.secrets[key]
             if "default" in _st.secrets and key in _st.secrets["default"]:
                 return _st.secrets["default"][key]
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Streamlit secrets error for {key}: {e}")
             # Any secrets access error -> fall back to env
             pass
     except ModuleNotFoundError:
         # streamlit not installed -> use env only
         pass
     
-    return os.getenv(key, default)
+    env_value = os.getenv(key, default)
+    if not env_value and key == "GOOGLE_CREDENTIALS_JSON":
+        logger.error(f"Missing required {key} in both Streamlit secrets and environment")
+    return env_value
 
 # ---------------------------------------------------------------------------
 # Ensure credentials.json exists BEFORE OAuth calls (redundant fallback)
 # ---------------------------------------------------------------------------
 
-# _creds_blob = get_secret("GOOGLE_CREDENTIALS_JSON")
 _creds_blob = get_secret("GOOGLE_CREDENTIALS_JSON")
 logger.info("GOOGLE_CREDENTIALS_JSON length: %s", len(_creds_blob or ""))
 logger.info("CREDENTIALS_FILE path: %s", _CRED_PATH)
-if _creds_blob and not os.path.exists(_CRED_PATH):
+
+if _creds_blob:
     try:
-        os.makedirs(os.path.dirname(_CRED_PATH), exist_ok=True)
-        with open(_CRED_PATH, "w", encoding="utf-8") as _f:
-            _f.write(_creds_blob)
-        logger.info("credentials.json written early at %s via controller fallback", _CRED_PATH)
-    except Exception as _e:
-        logger.exception("Controller failed to write credentials.json: %s", _e)
+        # Parse JSON to validate format
+        creds_data = json.loads(_creds_blob)
+        if not isinstance(creds_data, dict) or "web" not in creds_data:
+            raise ValueError("Invalid credentials format - missing 'web' key")
+        
+        if not os.path.exists(_CRED_PATH):
+            os.makedirs(os.path.dirname(_CRED_PATH), exist_ok=True)
+            with open(_CRED_PATH, "w", encoding="utf-8") as _f:
+                json.dump(creds_data, _f, indent=2)
+            logger.info("credentials.json written successfully at %s", _CRED_PATH)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse GOOGLE_CREDENTIALS_JSON: %s", e)
+    except Exception as e:
+        logger.exception("Failed to write credentials.json: %s", e)
+else:
+    logger.error("GOOGLE_CREDENTIALS_JSON environment variable is not set")
 
 # Gemini and Groq configuration pulled from environment variables
 GROQ_API_KEY = get_secret("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    logger.error("GROQ_API_KEY is not set")
 
 GEMINI_MODELS = [
     "gemini-2.0-flash",
@@ -113,7 +129,7 @@ GEMINI_MODELS = [
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
-    logger.warning("GEMINI_API_KEY is not set. Gemini calls will fail.")
+    logger.error("GEMINI_API_KEY is not set - Gemini calls will fail")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
