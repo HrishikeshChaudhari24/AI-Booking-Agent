@@ -7,6 +7,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components
+import os
 
 # ---------------------------------------------------------------------------
 # Ensure parent project root is on PYTHONPATH so `import agent...` works when
@@ -547,7 +548,7 @@ def main():
 # Ensure FastAPI backend is running when deployed on Streamlit Cloud
 # ---------------------------------------------------------------------------
 
-if "_backend_started" not in st.session_state:
+if os.getenv("START_BACKEND_WITH_STREAMLIT", "0") == "1" and "_backend_started" not in st.session_state:
     try:
         from threading import Thread
         from agent.controllers.booking_controller import run_fastapi
