@@ -298,26 +298,16 @@ def main():
     # --- Session Initialization ---
     restore_or_initialize_session()
 
-    # Initialize other session state variables if they don't exist
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "conversation_id" not in st.session_state:
-        st.session_state.conversation_id = str(uuid.uuid4())
-    if "user_email" not in st.session_state:
-        st.session_state.user_email = None
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-
-    # --- Main App Layout ---
     st.title("📅 AI Booking Agent")
 
-    # --- Sidebar for Auth & Logout ---
-    with st.sidebar:
-        if st.session_state.get("authenticated"):
+    # --- Main Logic ---
+    # If user is fully authenticated, show the main chat interface and sidebar
+    if st.session_state.get("authenticated"):
+        with st.sidebar:
             # User is logged in - show status and logout
             st.success(f"**Logged in as:**\n{st.session_state.user_email}")
             
-            if st.session_state.get("auth_required"):
+            if st.session_state.get("auth_required"): # Should not happen if authenticated, but for safety
                 st.warning("⚠️ Authorization required")
             else:
                 st.success("✅ Google Calendar access is authorized.")
@@ -360,18 +350,8 @@ def main():
                     st.session_state.messages = []
                     cookies.delete(USER_EMAIL_COOKIE)
                     st.rerun()
-        else:
-            render_login_interface()
-
-    # --- Main Panel Logic ---
-    # This logic correctly decides what to show in the main area.
-    
-    # 1. If authorization is required, show the auth steps.
-    if st.session_state.get("auth_required"):
-        handle_streamlit_auth()
-    
-    # 2. If authenticated and auth is NOT required, show the chat.
-    elif st.session_state.get("authenticated"):
+        
+        # --- Main Chat Area ---
         # Display chat history
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
@@ -400,7 +380,6 @@ def main():
                         data = response.json()
                         full_response = data.get("response", "Sorry, I had trouble understanding.")
                         
-                        # Update conversation state from backend if needed
                         backend_state = data.get("state", {})
                         if backend_state:
                             st.session_state.conversation_id = backend_state.get("conversation_id", st.session_state.conversation_id)
@@ -413,23 +392,17 @@ def main():
                 
                 message_placeholder.markdown(full_response)
             
-            # The user message is already added, add the assistant's final response
-            # Note: The backend state might already contain the full history
             if not any(m['role'] == 'assistant' and m['content'] == full_response for m in st.session_state.messages):
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+    # If user is NOT authenticated, handle the login/auth flow in the main panel
     else:
-        # Welcome screen for new users
-        st.markdown("""
-        ### Welcome! 👋
-        
-        I'm your AI appointment assistant. I can help you:
-        
-        - 📅 **Book appointments**
-        - 🔍 **Check availability**
-        - 📋 **View your schedule**
-        
-        **To get started, please log in using the sidebar** 👈
-        """)
+        # If email has been provided and we are waiting for Google Auth
+        if st.session_state.get("auth_required"):
+            handle_streamlit_auth()
+        # If no user is identified at all, show the initial login form
+        else:
+            render_login_interface()
 
 # ---------------------------------------------------------------------------
 # Ensure FastAPI backend is running when deployed on Streamlit Cloud
