@@ -296,7 +296,6 @@ def main():
     st.set_page_config(page_title="AI Booking Agent", page_icon="📅")
 
     # --- Session Initialization ---
-    # This MUST be the first thing to run on every page load.
     restore_or_initialize_session()
 
     # Initialize other session state variables if they don't exist
@@ -339,8 +338,15 @@ def main():
         else:
             render_login_interface()
 
-    # --- Main Chat Area ---
-    if st.session_state.get("authenticated"):
+    # --- Main Panel Logic ---
+    # This logic correctly decides what to show in the main area.
+    
+    # 1. If authorization is required, show the auth steps.
+    if st.session_state.get("auth_required"):
+        handle_streamlit_auth()
+    
+    # 2. If authenticated and auth is NOT required, show the chat.
+    elif st.session_state.get("authenticated"):
         # Display chat history
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
