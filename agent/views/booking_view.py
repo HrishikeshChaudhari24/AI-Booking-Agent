@@ -314,27 +314,52 @@ def main():
     # --- Sidebar for Auth & Logout ---
     with st.sidebar:
         if st.session_state.get("authenticated"):
-            st.success(f"Logged in as: {st.session_state.user_email}")
-            if st.button("Logout"):
-                # This should call the backend logout and clear session state
-                try:
-                    requests.post(
-                        f"{BACKEND}/logout",
-                        json={
-                            "user_email": st.session_state.user_email,
-                            "browser_session_id": st.session_state.browser_session_id,
-                        },
-                        timeout=5,
-                    )
-                except Exception as e:
-                    st.error(f"Logout failed: {e}")
-                
-                # Clear local state
-                st.session_state.user_email = None
-                st.session_state.authenticated = False
-                st.session_state.messages = []
-                cookies.delete(USER_EMAIL_COOKIE)
-                st.rerun()
+            # User is logged in - show status and logout
+            st.success(f"**Logged in as:**\n{st.session_state.user_email}")
+            
+            if st.session_state.get("auth_required"):
+                st.warning("⚠️ Authorization required")
+            else:
+                st.success("✅ Google Calendar access is authorized.")
+            
+            # Account actions
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("🔄 Refresh", key="refresh_auth", use_container_width=True):
+                    auth_result = validate_user_with_backend(st.session_state.user_email)
+                    if auth_result['authorized']:
+                        st.session_state.auth_required = False
+                        st.session_state.auth_url = ""
+                        st.success("Refreshed!")
+                    else:
+                        st.session_state.auth_required = True
+                        st.session_state.auth_url = auth_result.get('auth_url', '')
+                        st.warning("Re-auth needed")
+                    st.rerun()
+            
+            with col2:
+                if st.button("🔒 Logout", key="logout_btn", use_container_width=True):
+                    try:
+                        # Logout from this browser session
+                        requests.post(
+                            f"{BACKEND}/logout",
+                            json={
+                                "user_email": st.session_state.user_email,
+                                "browser_session_id": st.session_state.browser_session_id
+                            },
+                            timeout=5,
+                        )
+                    except Exception as e:
+                        st.error(f"Logout error: {e}")
+                    
+                    # Clear local state
+                    st.session_state.user_email = None
+                    st.session_state.authenticated = False
+                    st.session_state.messages = []
+                    cookies.delete(USER_EMAIL_COOKIE)
+                    st.rerun()
         else:
             render_login_interface()
 
