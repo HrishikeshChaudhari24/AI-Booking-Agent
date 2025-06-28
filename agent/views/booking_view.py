@@ -307,6 +307,8 @@ def main():
         st.session_state.user_email = None
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
+    if "auth_url" not in st.session_state:
+        st.session_state.auth_url = ""
 
     st.title("📅 AI Booking Agent")
 
@@ -341,7 +343,6 @@ def main():
             with col2:
                 if st.button("🔒 Logout", key="logout_btn", use_container_width=True):
                     try:
-                        # Logout from this browser session
                         requests.post(
                             f"{BACKEND}/logout",
                             json={
@@ -353,7 +354,6 @@ def main():
                     except Exception as e:
                         st.error(f"Logout error: {e}")
                     
-                    # Clear local state
                     st.session_state.user_email = None
                     st.session_state.authenticated = False
                     st.session_state.messages = []
@@ -361,18 +361,31 @@ def main():
                     st.rerun()
         else:
             render_login_interface()
+            
+        # --- Debug info in sidebar (restored) ---
+        st.markdown("---")
+        if st.checkbox("🔧 Debug Info", key="debug_toggle"):
+            st.subheader("Debug Information")
+            st.json({
+                "user_email": st.session_state.user_email,
+                "authenticated": st.session_state.get("authenticated"),
+                "auth_required": st.session_state.get("auth_required"),
+                "has_auth_url": bool(st.session_state.get("auth_url")),
+                "conversation_id": st.session_state.conversation_id,
+                "browser_session_id": st.session_state.get('browser_session_id', 'None'),
+                "message_count": len(st.session_state.messages),
+            })
 
     # --- Main Panel Logic ---
     if st.session_state.get("auth_required"):
         handle_streamlit_auth()
     
     elif st.session_state.get("authenticated"):
-        # Display chat history
+        # Chat Interface
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # Handle new user input
         if prompt := st.chat_input("How can I help you today?"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
@@ -394,12 +407,10 @@ def main():
                     if response.status_code == 200:
                         data = response.json()
                         full_response = data.get("response", "Sorry, I had trouble understanding.")
-                        
                         backend_state = data.get("state", {})
                         if backend_state:
                             st.session_state.conversation_id = backend_state.get("conversation_id", st.session_state.conversation_id)
                             st.session_state.messages = backend_state.get("messages", st.session_state.messages)
-
                     else:
                         full_response = f"Error from backend: {response.text}"
                 except Exception as e:
@@ -410,16 +421,10 @@ def main():
             if not any(m['role'] == 'assistant' and m['content'] == full_response for m in st.session_state.messages):
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
     else:
-        # Welcome screen for new users
+        # Welcome screen
         st.markdown("""
         ### Welcome! 👋
-        
-        I'm your AI appointment assistant. I can help you:
-        
-        - 📅 **Book appointments**
-        - 🔍 **Check availability**
-        - 📋 **View your schedule**
-        
+        I'm your AI appointment assistant.
         **To get started, please log in using the sidebar** 👈
         """)
 
