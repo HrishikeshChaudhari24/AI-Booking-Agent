@@ -69,26 +69,28 @@ load_dotenv()  # Loads variables from a .env file into process env, if present
 # ---------------------------------------------------------------------------
 
 def get_secret(key: str, default: str = "") -> str:
-    """Return secret from st.secrets if present else from OS env."""
+    """Fetch secret: prefer OS env, then Streamlit secrets (for UI runs)."""
+    # 1) Environment variable (preferred for Railway)
+    env_val = os.getenv(key)
+    if env_val not in (None, ""):
+        return env_val
+
+    # 2) Streamlit secrets fallback (for Streamlit Cloud/local)
     try:
-        import streamlit as _st  # local import to avoid hard dependency
-        try:
-            if key in _st.secrets:
-                return _st.secrets[key]
-            if "default" in _st.secrets and key in _st.secrets["default"]:
-                return _st.secrets["default"][key]
-        except Exception as e:
-            logger.warning(f"Streamlit secrets error for {key}: {e}")
-            # Any secrets access error -> fall back to env
-            pass
+        import streamlit as _st  # local import; may not exist in backend container
+        if key in _st.secrets:
+            return _st.secrets[key]
+        if "default" in _st.secrets and key in _st.secrets["default"]:
+            return _st.secrets["default"][key]
     except ModuleNotFoundError:
-        # streamlit not installed -> use env only
         pass
-    
-    env_value = os.getenv(key, default)
-    if not env_value and key == "GOOGLE_CREDENTIALS_JSON":
-        logger.error(f"Missing required {key} in both Streamlit secrets and environment")
-    return env_value
+    except Exception as e:
+        logger.warning("Streamlit secrets access error for %s: %s", key, e)
+
+    if key == "GOOGLE_CREDENTIALS_JSON":
+        logger.error("%s not found in environment or Streamlit secrets", key)
+
+    return default
 
 # ---------------------------------------------------------------------------
 # Ensure credentials.json exists BEFORE OAuth calls (redundant fallback)

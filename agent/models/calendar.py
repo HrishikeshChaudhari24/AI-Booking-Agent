@@ -22,29 +22,33 @@ import logging
 # ---------------------------------------------------------------------------
 
 def get_secret(key: str, default: str | None = ""):
-    """Return secret from Streamlit secrets if available, else from OS env.
+    """Return secret value from OS env first, then Streamlit secrets.
 
-    Accessing st.secrets when no secrets.toml exists raises
-    StreamlitSecretNotFoundError. This helper catches that so the backend can
-    still start when only environment variables are provided (e.g. on
-    Railway/Render).
+    Designed for server deployments (e.g. Railway) where secrets are passed
+    via environment variables. Falls back to `st.secrets` when running the
+    Streamlit front-end locally or on Streamlit Cloud.
     """
-    try:
-        import streamlit as _st  # local import to avoid hard dependency at runtime
+    # 1) Environment variable (preferred for Railway / Docker)
+    env_val = os.getenv(key)
+    if env_val not in (None, ""):
+        return env_val
 
-        try:
-            if key in _st.secrets:
-                return _st.secrets[key]
-            if "default" in _st.secrets and key in _st.secrets["default"]:
-                return _st.secrets["default"][key]
-        except Exception:
-            # Any lookup/parsing errors -> fall back to env
-            pass
+    # 2) Streamlit secrets (used when running in Streamlit Cloud or locally)
+    try:
+        import streamlit as _st  # local import to avoid heavy dependency at runtime
+
+        if key in _st.secrets:
+            return _st.secrets[key]
+        if "default" in _st.secrets and key in _st.secrets["default"]:
+            return _st.secrets["default"][key]
     except ModuleNotFoundError:
-        # streamlit not installed in backend-only builds
+        # Streamlit not installed – ignore
+        pass
+    except Exception:
+        # Any secrets access error – ignore and use default
         pass
 
-    return os.getenv(key, default)
+    return default
 
 # ---------------------------------------------------------------------------
 # Module setup
