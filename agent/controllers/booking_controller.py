@@ -77,7 +77,7 @@ def get_secret(key: str, default: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 # _creds_blob = get_secret("GOOGLE_CREDENTIALS_JSON")
-_creds_blob = st.secrets['default']['GOOGLE_CREDENTIALS_JSON']
+_creds_blob = get_secret("GOOGLE_CREDENTIALS_JSON")
 logger.info("GOOGLE_CREDENTIALS_JSON length: %s", len(_creds_blob or ""))
 logger.info("CREDENTIALS_FILE path: %s", _CRED_PATH)
 if _creds_blob and not os.path.exists(_CRED_PATH):
@@ -90,13 +90,13 @@ if _creds_blob and not os.path.exists(_CRED_PATH):
         logger.exception("Controller failed to write credentials.json: %s", _e)
 
 # Gemini and Groq configuration pulled from environment variables
-GROQ_API_KEY =st.secrets['default']['GROQ_API_KEY']
+GROQ_API_KEY = get_secret("GROQ_API_KEY")
 
 GEMINI_MODELS = [
     "gemini-2.0-flash",
     "gemini-1.5-flash",
 ]
-GEMINI_API_KEY = st.secrets['default']['GEMINI_API_KEY']
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY is not set. Gemini calls will fail.")
