@@ -105,25 +105,16 @@ def _ensure_credentials_file() -> None:
     if os.path.exists(CREDENTIALS_FILE):
         return
 
-    # Try to load from secrets or environment
-    raw_creds_blob = ""
-    if "GOOGLE_CREDENTIALS_JSON" in st.secrets:
-        raw_creds_blob = st.secrets["GOOGLE_CREDENTIALS_JSON"]
-    else:
-        raw_creds_blob = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    # creds_blob = None
 
-    creds_blob = ""
-    if raw_creds_blob is not None:
-        try:
-            creds_blob = json.loads(raw_creds_blob)
-        except Exception as e:
-            logger.error("Invalid JSON in GOOGLE_CREDENTIALS_JSON: %s", e)
-            return
-    else:
-        logger.warning("GOOGLE_CREDENTIALS_JSON not found in secrets or environment.")
-        creds_blob = None  # Explicitly set it
+    # Try to load from secrets
+    try:
+        creds_blob = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
+        st.success("Credentials loaded successfully!")
+    except Exception as e:
+        st.error(f"Failed to parse credentials: {e}")
 
-    # Try to construct from individual secrets if full blob missing
+    # Try to construct from individual secrets if full blob is missing or invalid
     if not creds_blob:
         try:
             pieces = {
