@@ -55,8 +55,9 @@ from groq import Groq
 # ---------------------------------------------------------------------------
 # Logger first so it is available for any early warnings
 # ---------------------------------------------------------------------------
-
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Environment / secret loading
@@ -67,6 +68,8 @@ load_dotenv()  # Loads variables from a .env file into process env, if present
 # ---------------------------------------------------------------------------
 # Unified secret getter (Streamlit native or env fallback)
 # ---------------------------------------------------------------------------
+
+
 
 def get_secret(key: str, default: str = "") -> str:
     """Fetch secret: prefer OS env, then Streamlit secrets (for UI runs)."""
@@ -800,6 +803,194 @@ from agent.utils.session_store import get_store as _get_session_store
 # Global instance shared by all request handlers
 SESSION_STORE = _get_session_store()
 
+def test_redis_connection():
+    """Test basic Redis connection and operations"""
+    try:
+        # Get Redis URL from environment
+        redis_url = os.getenv('REDIS_URL')
+        if not redis_url:
+            print("❌ REDIS_URL not found in environment variables")
+            return False
+            
+        print(f"🔗 Connecting to Redis: {redis_url[:20]}...")
+        
+        # Create Redis client
+        r = redis.from_url(redis_url, decode_responses=True)
+        
+        # Test basic operations
+        print("🧪 Testing basic Redis operations...")
+        
+        # Test SET and GET
+        test_key = "test_key_123"
+        test_value = "test_value_456"
+        
+        result = r.set(test_key, test_value)
+        print(f"SET result: {result}")
+        
+        retrieved = r.get(test_key)
+        print(f"GET result: {retrieved}")
+        
+        if retrieved == test_value:
+            print("✅ Basic Redis operations working!")
+            
+            # Clean up test key
+            r.delete(test_key)
+            return True
+        else:
+            print("❌ Basic Redis operations failed!")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Redis connection failed: {e}")
+        return False
+
+def test_session_store():
+    """Test session store operations specifically"""
+    try:
+        from agent.utils.session_store import get_store
+        
+        store = get_store()
+        print(f"📦 Session store type: {type(store)}")
+        
+        # Test session operations
+        test_session_id = "test_session_12345"
+        test_data = {"user_email": "test@example.com", "timestamp": "2024-01-01"}
+        
+        print("🧪 Testing session store operations...")
+        
+        # Set session
+        store.set_session(test_session_id, test_data)
+        print("✅ set_session called")
+        
+        # Get session
+        retrieved_data = store.get_session(test_session_id)
+        print(f"📥 Retrieved data: {retrieved_data}")
+        
+        if retrieved_data == test_data:
+            print("✅ Session store working correctly!")
+        else:
+            print(f"❌ Session store mismatch. Expected: {test_data}, Got: {retrieved_data}")
+        
+        # Test user sessions
+        test_user = "test@example.com"
+        store.add_user_session(test_user, test_session_id)
+        user_sessions = store.get_user_sessions(test_user)
+        print(f"👤 User sessions: {user_sessions}")
+        
+        # Clean up
+        store.delete_session(test_session_id)
+        store.remove_user_session(test_user, test_session_id)
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Session store test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def debug_current_session_storage():
+    """Debug what's happening in your current session storage"""
+    try:
+        print("🔍 Debugging current session storage...")
+        
+        # Test the exact flow from your code
+        from agent.utils.session_store import get_store
+        
+        SESSION_STORE = get_store()
+        
+        # Simulate store_browser_session function
+        session_id = "debug_session_123"
+        user_email = "debug@example.com"
+        
+        print(f"🔧 Storing session: {session_id} -> {user_email}")
+        
+        try:
+            SESSION_STORE.set_session(session_id, {"user_email": user_email})
+            print("✅ set_session completed")
+            
+            SESSION_STORE.add_user_session(user_email, session_id)
+            print("✅ add_user_session completed")
+            
+        except Exception as e:
+            print(f"❌ Redis operations failed: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Try to retrieve
+        try:
+            data = SESSION_STORE.get_session(session_id)
+            print(f"📥 Retrieved session data: {data}")
+            
+            sessions = SESSION_STORE.get_user_sessions(user_email)
+            print(f"📥 Retrieved user sessions: {sessions}")
+            
+        except Exception as e:
+            print(f"❌ Redis retrieval failed: {e}")
+            import traceback
+            traceback.print_exc()
+            
+    except Exception as e:
+        print(f"❌ Debug failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+def fixed_store_browser_session(session_id: str, user_email: str):
+    """Enhanced version of store_browser_session with proper error handling"""
+    
+    logger.info(f"Storing browser session: {session_id} -> {user_email}")
+    
+    # Try Redis first with detailed error handling
+    try:
+        from agent.utils.session_store import get_store
+        SESSION_STORE = get_store()
+        
+        # Check if it's actually a Redis store
+        if hasattr(SESSION_STORE, 'redis_client'):
+            logger.info("Using Redis session store")
+            
+            # Test Redis connection first
+            SESSION_STORE.redis_client.ping()
+            logger.info("Redis ping successful")
+            
+            # Store session data
+            result1 = SESSION_STORE.set_session(session_id, {"user_email": user_email})
+            logger.info(f"set_session result: {result1}")
+            
+            result2 = SESSION_STORE.add_user_session(user_email, session_id)
+            logger.info(f"add_user_session result: {result2}")
+            
+            # Verify storage
+            stored_data = SESSION_STORE.get_session(session_id)
+            logger.info(f"Verification - stored data: {stored_data}")
+            
+        else:
+            logger.warning("Session store is not Redis-backed, using fallback")
+            
+    except Exception as e:
+        logger.error(f"Redis session store failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+
+    # Always use SQLite fallback
+    try:
+        import sqlite3
+        conn = sqlite3.connect("user_data.db")
+        c = conn.cursor()
+        c.execute(
+            """
+            INSERT OR REPLACE INTO browser_sessions (session_id, user_email, last_accessed)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            """,
+            (session_id, user_email),
+        )
+        conn.commit()
+        conn.close()
+        logger.info("SQLite session storage successful")
+        
+    except Exception as e:
+        logger.error(f"SQLite session storage failed: {e}")
+
 def store_browser_session(session_id: str, user_email: str):
     """Persist or update the mapping between a browser session ID and the user email.
 
@@ -1423,4 +1614,59 @@ async def restore_session(info: BrowserInfo):
             }
 
     return {"session_found": False}
+
+
+# ---------------------------------------------------------------------------
+# Redis connection health-check endpoint
+# ---------------------------------------------------------------------------
+
+@app.get("/redis_test")
+async def redis_test():
+    """Provides a direct way to test Redis connectivity and configuration."""
+    
+    # Check if we are using the real store or the dummy one
+    from agent.utils.session_store import RedisSessionStore, _DummyStore
+    
+    if isinstance(SESSION_STORE, _DummyStore):
+        return {
+            "status": "CONFIG_ERROR",
+            "message": "Redis is not configured. The application is using a no-op dummy store. Check startup logs for 'FAILED to initialize RedisSessionStore'.",
+            "troubleshooting": {
+                "check_1": "Is REDIS_URL set in the environment?",
+                "check_2": "Is SESSION_ENCRYPTION_KEY set and a valid 44-character Fernet key?",
+                "check_3": "Are 'redis' and 'cryptography' packages installed?",
+                "check_4": "Can the backend container connect to the Redis host/port specified in REDIS_URL?",
+            }
+        }
+    
+    if isinstance(SESSION_STORE, RedisSessionStore):
+        try:
+            test_key = "redis_test_key"
+            test_value = f"Connection successful at {datetime.utcnow().isoformat()}"
+            SESSION_STORE.client.set(test_key, test_value, ex=60) # set with 1-minute expiry
+            read_value = SESSION_STORE.client.get(test_key)
+            
+            if read_value == test_value:
+                 return {
+                    "status": "SUCCESS",
+                    "message": "Successfully connected to Redis, wrote a key, and read it back.",
+                    "redis_ping": SESSION_STORE.client.ping(),
+                 }
+            else:
+                 return {
+                    "status": "ERROR",
+                    "message": "Connected to Redis, but failed to read back the key that was just written.",
+                    "wrote": test_value,
+                    "read": read_value
+                 }
+
+        except Exception as e:
+            return {
+                "status": "CONNECTION_ERROR",
+                "message": "Failed to communicate with Redis server even though the store was initialized.",
+                "error_type": str(type(e).__name__),
+                "error_details": str(e),
+            }
+
+    return {"status": "UNKNOWN_ERROR", "message": "The session store is of an unexpected type."}
 

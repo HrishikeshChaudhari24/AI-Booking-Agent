@@ -88,8 +88,34 @@ class RedisSessionStore:
 # Factory used by controller
 
 def get_store():
+    # --- Enhanced startup diagnostics ---
+    redis_url = os.getenv("REDIS_URL")
+    enc_key = os.getenv("SESSION_ENCRYPTION_KEY")
+    
+    logger.info("─" * 60)
+    logger.info("Attempting to initialize RedisSessionStore...")
+    if not redis_url:
+        logger.error("  - REDIS_URL environment variable: NOT FOUND")
+    else:
+        # Avoid logging the full password
+        safe_url = redis_url.split('@')[-1]
+        logger.info(f"  - REDIS_URL found: pointing to ...@{safe_url}")
+
+    if not enc_key:
+        logger.error("  - SESSION_ENCRYPTION_KEY environment variable: NOT FOUND")
+    else:
+        logger.info(f"  - SESSION_ENCRYPTION_KEY found: length={len(enc_key)}")
+    logger.info("─" * 60)
+    # --- End diagnostics ---
+
     try:
-        return RedisSessionStore()
+        store = RedisSessionStore()
+        logger.info("✅ RedisSessionStore initialized successfully.")
+        return store
     except Exception as e:
-        logger.warning("Redis session store not available – falling back to dummy: %s", e)
+        logger.error("=" * 60)
+        logger.error(">>> FAILED to initialize RedisSessionStore. Using dummy fallback. <<<")
+        logger.exception("  - Reason for failure:") # This will print the full traceback
+        logger.error("=" * 60)
+
         return _DummyStore() 
