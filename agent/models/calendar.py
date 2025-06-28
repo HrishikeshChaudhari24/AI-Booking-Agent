@@ -109,7 +109,7 @@ def _ensure_credentials_file() -> None:
 
     # Try to load from secrets
     try:
-        creds_blob = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
+        creds_blob = st.secrets['GOOGLE_CREDENTIALS_JSON']
         st.success("Credentials loaded successfully!")
     except Exception as e:
         st.error(f"Failed to parse credentials: {e}")
