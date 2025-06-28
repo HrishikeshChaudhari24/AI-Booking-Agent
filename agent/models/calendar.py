@@ -104,16 +104,16 @@ def _ensure_credentials_file() -> None:
     """Write credentials.json from secrets/env if it is missing."""
     if os.path.exists(CREDENTIALS_FILE):
         return
-
-    # creds_blob = None
-
+    
+    creds_blob = None
+    
     # Try to load from secrets
     try:
         creds_blob = st.secrets['GOOGLE_CREDENTIALS_JSON']
         st.success("Credentials loaded successfully!")
     except Exception as e:
         st.error(f"Failed to parse credentials: {e}")
-
+    
     # Try to construct from individual secrets if full blob is missing or invalid
     if not creds_blob:
         try:
@@ -127,7 +127,6 @@ def _ensure_credentials_file() -> None:
                 "redirect_uris": st.secrets.GOOGLE_OAUTH_REDIRECT_URIS,
                 "javascript_origins": st.secrets.GOOGLE_OAUTH_JS_ORIGINS,
             }
-
             if pieces["client_id"] and pieces["client_secret"]:
                 creds_blob = {"web": pieces}
             else:
@@ -136,15 +135,16 @@ def _ensure_credentials_file() -> None:
         except Exception:
             logger.exception("Failed to build credentials from discrete secrets")
             return
-
+    
     # Write to file
     try:
         os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
-        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as _f:
-            _f.write(json.dumps(creds_blob, indent=2))
+        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
+            f.write(json.dumps(creds_blob, indent=2))
         logger.info("credentials.json created at %s", CREDENTIALS_FILE)
     except Exception:
         logger.exception("Failed to write credentials.json to disk")
+
 
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
