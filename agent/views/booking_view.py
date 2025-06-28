@@ -295,10 +295,10 @@ def main():
     """Main Streamlit application"""
     st.set_page_config(page_title="AI Booking Agent", page_icon="📅")
 
-    # --- Session Initialization ---
+    # --- Session Initialization (using the new, working logic) ---
     restore_or_initialize_session()
 
-    # Initialize other session state variables if they don't exist
+    # Initialize session state variables if they don't exist
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
@@ -310,18 +310,19 @@ def main():
     if "auth_url" not in st.session_state:
         st.session_state.auth_url = ""
 
-    st.title("📅 AI Booking Agent")
+    st.title("📅 AI Appointment Assistant")
 
-    # --- Sidebar for Auth & Logout ---
+    # --- Sidebar (restored to the user's desired layout) ---
     with st.sidebar:
-        if st.session_state.get("authenticated"):
+        if st.session_state.get("user_email"):
             # User is logged in - show status and logout
             st.success(f"**Logged in as:**\n{st.session_state.user_email}")
+            st.info(f"**Browser Session:** {st.session_state.get('browser_session_id', 'N/A')[:8]}...")
             
             if st.session_state.get("auth_required"):
                 st.warning("⚠️ Authorization required")
             else:
-                st.success("✅ Google Calendar access is authorized.")
+                st.success("✅ Ready to help!")
             
             # Account actions
             st.markdown("---")
@@ -333,7 +334,7 @@ def main():
                     if auth_result['authorized']:
                         st.session_state.auth_required = False
                         st.session_state.auth_url = ""
-                        st.success("Refreshed!")
+                        st.success("✅ Refreshed!")
                     else:
                         st.session_state.auth_required = True
                         st.session_state.auth_url = auth_result.get('auth_url', '')
@@ -354,15 +355,22 @@ def main():
                     except Exception as e:
                         st.error(f"Logout error: {e}")
                     
+                    # Use the new cookie manager
+                    cookies.delete(USER_EMAIL_COOKIE)
+                    
+                    # Clear session state
                     st.session_state.user_email = None
                     st.session_state.authenticated = False
+                    st.session_state.auth_required = False
+                    st.session_state.auth_url = ""
                     st.session_state.messages = []
-                    cookies.delete(USER_EMAIL_COOKIE)
+                    st.session_state.conversation_id = str(uuid.uuid4())
                     st.rerun()
         else:
+            # User not logged in - show login interface
             render_login_interface()
-            
-        # --- Debug info in sidebar (restored) ---
+
+        # Debug info in sidebar (restored)
         st.markdown("---")
         if st.checkbox("🔧 Debug Info", key="debug_toggle"):
             st.subheader("Debug Information")
@@ -376,57 +384,63 @@ def main():
                 "message_count": len(st.session_state.messages),
             })
 
-    # --- Main Panel Logic ---
-    if st.session_state.get("auth_required"):
-        handle_streamlit_auth()
-    
-    elif st.session_state.get("authenticated"):
+
+    # --- Main Panel Logic (restored to the user's desired layout) ---
+    if handle_streamlit_auth():
+        return
+
+    if not st.session_state.user_email:
+        # Welcome screen for new users
+        st.markdown("""
+        ### Welcome! 👋
+        
+        I'm your AI appointment assistant. I can help you:
+        - 📅 **Book appointments**
+        - 🔍 **Check availability**
+        - 📋 **View your schedule**
+        
+        **To get started, please log in using the sidebar** 👈
+        """)
+        return
+
+    if st.session_state.user_email and not st.session_state.auth_required:
         # Chat Interface
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        if prompt := st.chat_input("How can I help you today?"):
-            st.session_state.messages.append({"role": "user", "content": prompt})
+        if user_input := st.chat_input("Ask me to book an appointment or check availability..."):
+            st.session_state.messages.append({"role": "user", "content": user_input})
             with st.chat_message("user"):
-                st.markdown(prompt)
+                st.markdown(user_input)
 
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                full_response = ""
                 try:
                     response = requests.post(
                         f"{BACKEND}/process_input",
                         json={
-                            "user_input": prompt,
+                            "user_input": user_input,
                             "conversation_id": st.session_state.conversation_id,
                             "user_email": st.session_state.user_email,
                         },
                         timeout=60,
                     )
                     if response.status_code == 200:
-                        data = response.json()
-                        full_response = data.get("response", "Sorry, I had trouble understanding.")
-                        backend_state = data.get("state", {})
-                        if backend_state:
-                            st.session_state.conversation_id = backend_state.get("conversation_id", st.session_state.conversation_id)
-                            st.session_state.messages = backend_state.get("messages", st.session_state.messages)
+                        result = response.json()
+                        backend_state = result.get("state", {})
+                        st.session_state.auth_required = backend_state.get("auth_required", False)
+                        st.session_state.auth_url = backend_state.get("auth_url", "")
+
+                        if not st.session_state.auth_required:
+                            message_placeholder.markdown(result["response"])
+                            st.session_state.messages.append({"role": "assistant", "content": result["response"]})
+                        else:
+                            st.rerun()
                     else:
-                        full_response = f"Error from backend: {response.text}"
+                        message_placeholder.error(f"Error: {response.text}")
                 except Exception as e:
-                    full_response = f"Failed to get response from backend: {e}"
-                
-                message_placeholder.markdown(full_response)
-            
-            if not any(m['role'] == 'assistant' and m['content'] == full_response for m in st.session_state.messages):
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
-    else:
-        # Welcome screen
-        st.markdown("""
-        ### Welcome! 👋
-        I'm your AI appointment assistant.
-        **To get started, please log in using the sidebar** 👈
-        """)
+                    message_placeholder.error(f"An error occurred: {e}")
 
 # ---------------------------------------------------------------------------
 # Ensure FastAPI backend is running when deployed on Streamlit Cloud
