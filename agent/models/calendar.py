@@ -35,7 +35,7 @@ _ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
 CREDENTIALS_FILE = os.path.abspath(
     os.getenv("GOOGLE_CREDENTIALS_FILE", str(_ROOT_DIR / "credentials.json"))
 )
-REDIRECT_URI = st.secrets.get("OAUTH_REDIRECT_URI", os.getenv("OAUTH_REDIRECT_URI", "http://localhost:8080/callback"))
+REDIRECT_URI = st.secrets.get("OAUTH_REDIRECT_URI", os.getenv("OAUTH_REDIRECT_URI", "https://ai-booking-agent-efd.streamlit.app/callback"))
 
 # ---------------------------------------------------------------------------
 # Ensure credentials file exists from environment secret
