@@ -116,6 +116,20 @@ def _ensure_credentials_file() -> None:
         st.write(f"Available secrets keys: {secrets_keys}")
         logger.info(f"Available secrets keys: {secrets_keys}")
         
+        # Check if secrets are under 'default' key
+        if 'default' in st.secrets:
+            default_secrets = st.secrets['default']
+            print(f"Secrets under 'default': {list(default_secrets.keys())}")
+            st.write(f"Secrets under 'default': {list(default_secrets.keys())}")
+            
+            for key in default_secrets.keys():
+                if 'GOOGLE' in key.upper():
+                    secret_value = default_secrets[key]
+                    print(f"Secret default.{key}: {secret_value}")
+                    st.write(f"Secret default.{key}: {secret_value}")
+                    logger.info(f"Secret default.{key}: {secret_value}")
+        
+        # Also check top-level secrets
         for key in st.secrets.keys():
             if 'GOOGLE' in key.upper():
                 secret_value = st.secrets[key]
@@ -131,7 +145,14 @@ def _ensure_credentials_file() -> None:
     
     # Try to load from secrets
     try:
-        creds_blob = st.secrets['GOOGLE_CREDENTIALS_JSON']
+        # Try both direct access and default key access
+        if 'GOOGLE_CREDENTIALS_JSON' in st.secrets:
+            creds_blob = st.secrets['GOOGLE_CREDENTIALS_JSON']
+        elif 'default' in st.secrets and 'GOOGLE_CREDENTIALS_JSON' in st.secrets['default']:
+            creds_blob = st.secrets['default']['GOOGLE_CREDENTIALS_JSON']
+        else:
+            raise KeyError("GOOGLE_CREDENTIALS_JSON not found")
+            
         print(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
         st.write(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
         logger.info(f"GOOGLE_CREDENTIALS_JSON found: {creds_blob}")
@@ -151,15 +172,24 @@ def _ensure_credentials_file() -> None:
         st.write("Attempting to build credentials from individual secrets...")
         logger.info("Attempting to build credentials from individual secrets...")
         try:
+            # Helper function to get secret value
+            def get_secret(key):
+                if key in st.secrets:
+                    return st.secrets[key]
+                elif 'default' in st.secrets and key in st.secrets['default']:
+                    return st.secrets['default'][key]
+                else:
+                    return None
+            
             # Log each piece individually
-            client_id = st.secrets.get('GOOGLE_OAUTH_CLIENT_ID', None)
-            project_id = st.secrets.get('GOOGLE_OAUTH_PROJECT_ID', None)
-            auth_uri = st.secrets.get('GOOGLE_OAUTH_AUTH_URI', None)
-            token_uri = st.secrets.get('GOOGLE_OAUTH_TOKEN_URI', None)
-            certs_uri = st.secrets.get('GOOGLE_OAUTH_CERTS_URI', None)
-            client_secret = st.secrets.get('GOOGLE_OAUTH_CLIENT_SECRET', None)
-            redirect_uris = st.secrets.get('GOOGLE_OAUTH_REDIRECT_URIS', None)
-            js_origins = st.secrets.get('GOOGLE_OAUTH_JS_ORIGINS', None)
+            client_id = get_secret('GOOGLE_OAUTH_CLIENT_ID')
+            project_id = get_secret('GOOGLE_OAUTH_PROJECT_ID')
+            auth_uri = get_secret('GOOGLE_OAUTH_AUTH_URI')
+            token_uri = get_secret('GOOGLE_OAUTH_TOKEN_URI')
+            certs_uri = get_secret('GOOGLE_OAUTH_CERTS_URI')
+            client_secret = get_secret('GOOGLE_OAUTH_CLIENT_SECRET')
+            redirect_uris = get_secret('GOOGLE_OAUTH_REDIRECT_URIS')
+            js_origins = get_secret('GOOGLE_OAUTH_JS_ORIGINS')
             
             print(f"GOOGLE_OAUTH_CLIENT_ID: {client_id}")
             print(f"GOOGLE_OAUTH_PROJECT_ID: {project_id}")
@@ -223,7 +253,6 @@ def _ensure_credentials_file() -> None:
         logger.exception(f"Failed to write credentials.json to disk: {e}")
     
     logger.info("=== END DEBUGGING SECRETS ===")
-
 
 def generate_auth_url(user_email: str) -> str:
     """Kick off OAuth and return the consent URL."""
