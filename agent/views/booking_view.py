@@ -20,7 +20,11 @@ if ROOT_DIR not in sys.path:
     sys.path.append(ROOT_DIR)
 
 # BACKEND = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8080")
+# BACKEND = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8080")
 BACKEND = st.secrets["default"]["BACKEND_BASE_URL"] 
+# Cookie key for persisting logged-in user email across hard reloads
+USER_EMAIL_COOKIE = "booking_user_email"
+
 # ---------------------------------------------------------------------------
 # Cookie Management Functions
 # ---------------------------------------------------------------------------
@@ -192,6 +196,23 @@ def initialize_browser_session():
                     st.session_state.auth_required = not result.get('authorized', False)
         except Exception:
             pass
+
+    # --------------------------------------------------------------
+    # Restore user_email from browser cookie after a hard refresh
+    # --------------------------------------------------------------
+    if 'user_email' not in st.session_state or not st.session_state.user_email:
+        # Trigger JS to send cookie value back
+        if USER_EMAIL_COOKIE not in st.session_state:
+            get_browser_cookie(USER_EMAIL_COOKIE)
+            time.sleep(0.1)
+
+        cached_email = st.session_state.get(USER_EMAIL_COOKIE)
+        if cached_email:
+            st.session_state.user_email = cached_email
+            # Validate with backend to confirm still authorized
+            auth_result = validate_user_with_backend(cached_email)
+            st.session_state.auth_required = not auth_result.get('authorized', False)
+            st.session_state.auth_url = auth_result.get('auth_url', '')
 
 
 def get_authenticated_users():
@@ -391,6 +412,7 @@ def main():
 
                     # Clear cookies
                     delete_browser_cookie('appointment_session_id')
+                    delete_browser_cookie(USER_EMAIL_COOKIE)
                     
                     # Clear session state
                     st.session_state.user_email = None
