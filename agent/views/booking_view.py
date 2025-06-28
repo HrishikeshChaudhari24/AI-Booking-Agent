@@ -293,7 +293,7 @@ def render_login_interface():
 
 def main():
     """Main Streamlit application"""
-    st.set_page_config(page_title="AI Booking Agent", layout="wide")
+    st.set_page_config(page_title="AI Booking Agent", page_icon="📅")
 
     # --- Session Initialization ---
     # This MUST be the first thing to run on every page load.
@@ -312,79 +312,93 @@ def main():
     # --- Main App Layout ---
     st.title("📅 AI Booking Agent")
 
-    # If user is not authenticated, show the login/auth interface
-    if not st.session_state.get("authenticated"):
-        render_login_interface()
-        return  # Stop execution here until user is logged in
+    # --- Sidebar for Auth & Logout ---
+    with st.sidebar:
+        if st.session_state.get("authenticated"):
+            st.success(f"Logged in as: {st.session_state.user_email}")
+            if st.button("Logout"):
+                # This should call the backend logout and clear session state
+                try:
+                    requests.post(
+                        f"{BACKEND}/logout",
+                        json={
+                            "user_email": st.session_state.user_email,
+                            "browser_session_id": st.session_state.browser_session_id,
+                        },
+                        timeout=5,
+                    )
+                except Exception as e:
+                    st.error(f"Logout failed: {e}")
+                
+                # Clear local state
+                st.session_state.user_email = None
+                st.session_state.authenticated = False
+                st.session_state.messages = []
+                cookies.delete(USER_EMAIL_COOKIE)
+                st.rerun()
+        else:
+            render_login_interface()
 
-    # --- Main Chat Interface (only shown if authenticated) ---
-    st.sidebar.success(f"Logged in as: {st.session_state.user_email}")
-    if st.sidebar.button("Logout"):
-        # This should call the backend logout and clear session state
-        try:
-            requests.post(
-                f"{BACKEND}/logout",
-                json={
-                    "user_email": st.session_state.user_email,
-                    "browser_session_id": st.session_state.browser_session_id,
-                },
-                timeout=5,
-            )
-        except Exception as e:
-            st.error(f"Logout failed: {e}")
-        
-        # Clear local state
-        st.session_state.user_email = None
-        st.session_state.authenticated = False
-        st.session_state.messages = []
-        cookies.delete(USER_EMAIL_COOKIE)
-        st.rerun()
+    # --- Main Chat Area ---
+    if st.session_state.get("authenticated"):
+        # Display chat history
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        # Handle new user input
+        if prompt := st.chat_input("How can I help you today?"):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-    # Handle new user input
-    if prompt := st.chat_input("How can I help you today?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                try:
+                    response = requests.post(
+                        f"{BACKEND}/process_input",
+                        json={
+                            "user_input": prompt,
+                            "conversation_id": st.session_state.conversation_id,
+                            "user_email": st.session_state.user_email,
+                        },
+                        timeout=60,
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        full_response = data.get("response", "Sorry, I had trouble understanding.")
+                        
+                        # Update conversation state from backend if needed
+                        backend_state = data.get("state", {})
+                        if backend_state:
+                            st.session_state.conversation_id = backend_state.get("conversation_id", st.session_state.conversation_id)
+                            st.session_state.messages = backend_state.get("messages", st.session_state.messages)
 
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
-            try:
-                response = requests.post(
-                    f"{BACKEND}/process_input",
-                    json={
-                        "user_input": prompt,
-                        "conversation_id": st.session_state.conversation_id,
-                        "user_email": st.session_state.user_email,
-                    },
-                    timeout=60,
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    full_response = data.get("response", "Sorry, I had trouble understanding.")
-                    
-                    # Update conversation state from backend if needed
-                    backend_state = data.get("state", {})
-                    if backend_state:
-                         st.session_state.conversation_id = backend_state.get("conversation_id", st.session_state.conversation_id)
-                         st.session_state.messages = backend_state.get("messages", st.session_state.messages)
-
-                else:
-                    full_response = f"Error from backend: {response.text}"
-            except Exception as e:
-                full_response = f"Failed to get response from backend: {e}"
+                    else:
+                        full_response = f"Error from backend: {response.text}"
+                except Exception as e:
+                    full_response = f"Failed to get response from backend: {e}"
+                
+                message_placeholder.markdown(full_response)
             
-            message_placeholder.markdown(full_response)
+            # The user message is already added, add the assistant's final response
+            # Note: The backend state might already contain the full history
+            if not any(m['role'] == 'assistant' and m['content'] == full_response for m in st.session_state.messages):
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+    else:
+        # Welcome screen for new users
+        st.markdown("""
+        ### Welcome! 👋
         
-        # The user message is already added, add the assistant's final response
-        # Note: The backend state might already contain the full history
-        if not any(m['role'] == 'assistant' and m['content'] == full_response for m in st.session_state.messages):
-             st.session_state.messages.append({"role": "assistant", "content": full_response})
+        I'm your AI appointment assistant. I can help you:
+        
+        - 📅 **Book appointments**
+        - 🔍 **Check availability**
+        - 📋 **View your schedule**
+        
+        **To get started, please log in using the sidebar** 👈
+        """)
 
 # ---------------------------------------------------------------------------
 # Ensure FastAPI backend is running when deployed on Streamlit Cloud
