@@ -76,7 +76,8 @@ def get_secret(key: str, default: str = "") -> str:
 # Ensure credentials.json exists BEFORE OAuth calls (redundant fallback)
 # ---------------------------------------------------------------------------
 
-_creds_blob = get_secret("GOOGLE_CREDENTIALS_JSON")
+# _creds_blob = get_secret("GOOGLE_CREDENTIALS_JSON")
+_creds_blob = st.secrets['default']['GOOGLE_CREDENTIALS_JSON']
 logger.info("GOOGLE_CREDENTIALS_JSON length: %s", len(_creds_blob or ""))
 logger.info("CREDENTIALS_FILE path: %s", _CRED_PATH)
 if _creds_blob and not os.path.exists(_CRED_PATH):
@@ -89,13 +90,13 @@ if _creds_blob and not os.path.exists(_CRED_PATH):
         logger.exception("Controller failed to write credentials.json: %s", _e)
 
 # Gemini and Groq configuration pulled from environment variables
-GROQ_API_KEY = get_secret("GROQ_API_KEY", "")
+GROQ_API_KEY =st.secrets['default']['GROQ_API_KEY']
 
 GEMINI_MODELS = [
     "gemini-2.0-flash",
     "gemini-1.5-flash",
 ]
-GEMINI_API_KEY = get_secret("GEMINI_API_KEY", "")
+GEMINI_API_KEY = st.secrets['default']['GEMINI_API_KEY']
 
 if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY is not set. Gemini calls will fail.")
@@ -1093,7 +1094,7 @@ async def oauth_callback(code: str):
     # Identify pending user
     user_email = next((e for e, d in user_credentials.items() if d.get("status") == "pending_auth"), None)
     if not user_email:
-        return RedirectResponse("http://localhost:8501?error=no_pending_auth")
+        return RedirectResponse("https://ai-booking-agent-efd.streamlit.app?error=no_pending_auth")
     flow = user_credentials[user_email]["flow"]
     flow.fetch_token(code=code)
     store_user_credentials(user_email, flow.credentials)
@@ -1105,7 +1106,7 @@ async def oauth_callback(code: str):
             browser_sessions[sid]["status"] = "completed"
             browser_sessions[sid]["auth_url"] = ""
 
-    return RedirectResponse("http://localhost:8501?auth=success")
+    return RedirectResponse("https://ai-booking-agent-efd.streamlit.app?auth=success")
 
 
 @app.get("/check_auth")
