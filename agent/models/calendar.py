@@ -75,7 +75,7 @@ CREDENTIALS_FILE = os.path.abspath(
 # Prefer explicit environment variable, else fall back to Streamlit secrets or default URL
 REDIRECT_URI = os.getenv(
     "OAUTH_REDIRECT_URI",
-    get_secret("OAUTH_REDIRECT_URI", "https://ai-booking-agent-production.up.railway.app/callback"),
+    get_secret("OAUTH_REDIRECT_URI", "https://ai-booking-agent-jut8.onrender.com/callback"),
 )
 
 # ---------------------------------------------------------------------------
