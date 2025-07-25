@@ -1,0 +1,30 @@
+# ── Secret keys & credentials ───────────────────────────────
+.env                          # Environment variables
+/agent/.env
+credentials.json              # Fallback at root level
+/agent/credentials.json       # Google OAuth client secrets
+
+# ── Cached Google tokens ─────────────────────────────────────
+/agent/token_*.json
+token_*.json
+
+# ── Databases / runtime data ────────────────────────────────
+/agent/user_data.db
+user_data.db
+
+# ── Python cache ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+**/__pycache__/
+
+# ── IDE and OS cruft ────────────────────────────────────────
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Optional: log files
+*.log
+agent/credentials.json
+
+# Streamlit secrets
+.streamlit/secrets.toml

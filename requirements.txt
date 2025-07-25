@@ -1,0 +1,27 @@
+# ── Web framework & ASGI server ──────────────────────────────
+fastapi>=0.111
+uvicorn[standard]>=0.24
+
+# ── Streamlit front-end ──────────────────────────────────────
+streamlit>=1.31
+
+# ── Google APIs & OAuth ─────────────────────────────────────
+google-api-python-client>=2.114
+google-auth>=2.29
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2      # pulled by api-client but list explicitly
+
+# ── Language-model SDKs ─────────────────────────────────────
+google-generativeai>=0.3
+groq>=0.2
+
+# ── Session storage back-end ───────────────────────────────────────────
+redis>=5.0
+cryptography>=42.0
+langgraph>=0.0.24
+
+# ── Utility libraries ───────────────────────────────────────
+python-dotenv>=1.0
+requests>=2.31
+python-dateutil>=2.9
+pytz>=2024.1 
