@@ -2,6 +2,7 @@ import uvicorn
 import os
 from agent.controllers.booking_controller import app
 FRONTEND_ORIGIN = "https://ai-booking-agent-efd.streamlit.app"
+from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
